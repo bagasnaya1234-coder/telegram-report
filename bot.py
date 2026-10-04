@@ -594,31 +594,8 @@ def main():
         )
     )
 
-    # Render menyediakan PORT dan RENDER_EXTERNAL_URL.
-    # Untuk menjalankan bot di laptop, tetap bisa memakai:
-    # python bot.py
-    # dengan WEBHOOK_URL yang disiapkan sendiri.
-    port = int(os.getenv("PORT", "10000"))
-    render_url = os.getenv("RENDER_EXTERNAL_URL")
-    webhook_url = os.getenv("WEBHOOK_URL")
-
-    if not webhook_url and render_url:
-        webhook_url = f"{render_url.rstrip('/')}/{TOKEN}"
-
-    if webhook_url:
-        print(f"Mode: webhook")
-        print(f"Port: {port}")
-
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=TOKEN,
-            webhook_url=webhook_url,
-            drop_pending_updates=True,
-        )
-    else:
-        print("Mode: polling")
-        app.run_polling()
+    print("Mode: polling")
+    app.run_polling()
 
 
 if __name__ == "__main__":
