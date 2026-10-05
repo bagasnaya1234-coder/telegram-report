@@ -835,8 +835,11 @@ def main():
         .builder()
         .token(TOKEN)
         .build()
+        
     )
 
+
+    print("=== APP TELEGRAM BERHASIL 0510 ===", flush=True)
     app.add_handler(
         CommandHandler(
             "start",
