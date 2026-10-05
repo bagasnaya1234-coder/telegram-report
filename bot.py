@@ -1,12 +1,15 @@
-print("=== BOT START TEST 0510 ===", flush=True)
-
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from html import escape
 
 from supabase import create_client, Client
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -17,8 +20,6 @@ from telegram.ext import (
 )
 
 
-print("=== IMPORT SELESAI 0510 ===", flush=True)
-
 # =========================================================
 # KONFIGURASI
 # =========================================================
@@ -26,6 +27,7 @@ print("=== IMPORT SELESAI 0510 ===", flush=True)
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
 
 if not TOKEN:
     raise RuntimeError("TELEGRAM_BOT_TOKEN belum diatur.")
@@ -36,17 +38,15 @@ if not SUPABASE_URL:
 if not SUPABASE_KEY:
     raise RuntimeError("SUPABASE_KEY belum diatur.")
 
+
 supabase: Client = create_client(
     SUPABASE_URL.rstrip("/"),
     SUPABASE_KEY
 )
 
+
 TIMEZONE = ZoneInfo("Asia/Jakarta")
 
-
-# =========================================================
-# DATA
-# =========================================================
 
 BULAN = [
     "Januari",
@@ -63,12 +63,14 @@ BULAN = [
     "Desember",
 ]
 
+
 KATEGORI = {
     "ib_reguler": "IB Reguler",
     "ib_sameday": "IB Sameday",
     "mt_reguler": "MT Reguler",
     "mt_sameday": "MT Sameday",
 }
+
 
 STATUS = {
     "done": ("Done", "✅"),
@@ -92,11 +94,17 @@ def tanggal_sekarang():
 
 
 # =========================================================
-# USER
+# DATABASE USER
 # =========================================================
 
-def get_user(telegram_user):
-    user_id = telegram_user.id
+def get_user(user):
+    """
+    Mengambil data user berdasarkan Telegram user.id.
+
+    Setiap user mempunyai data sendiri.
+    """
+
+    telegram_user_id = user.id
 
     try:
         response = (
@@ -105,32 +113,49 @@ def get_user(telegram_user):
             .select(
                 "telegram_user_id, username, first_name, team_name"
             )
-            .eq("telegram_user_id", user_id)
+            .eq(
+                "telegram_user_id",
+                telegram_user_id
+            )
             .limit(1)
             .execute()
         )
 
         if response.data:
-            return response.data[0]
+            row = response.data[0]
 
-        data = {
-            "telegram_user_id": user_id,
-            "username": telegram_user.username,
-            "first_name": telegram_user.first_name or "",
+            # Update informasi Telegram terbaru
+            supabase.table("bot_users").update({
+                "username": user.username,
+                "first_name": user.first_name,
+                "updated_at": datetime.now(TIMEZONE).isoformat(),
+            }).eq(
+                "telegram_user_id",
+                telegram_user_id
+            ).execute()
+
+            return row
+
+        # User belum pernah terdaftar
+        new_user = {
+            "telegram_user_id": telegram_user_id,
+            "username": user.username,
+            "first_name": user.first_name,
             "team_name": "Belum diatur",
         }
 
-        response = (
-            supabase
-            .table("bot_users")
-            .insert(data)
-            .execute()
-        )
+        supabase.table("bot_users").insert(
+            new_user
+        ).execute()
 
-        return response.data[0]
+        return new_user
 
     except Exception as e:
-        print(f"Supabase get_user error: {e}")
+        print(
+            f"Supabase get_user error: {e}",
+            flush=True
+        )
+
         raise RuntimeError(
             "Gagal mengambil data user dari Supabase."
         )
@@ -138,31 +163,29 @@ def get_user(telegram_user):
 
 def update_team_name(user_id, team_name):
     try:
-        (
-            supabase
-            .table("bot_users")
-            .update({
-                "team_name": team_name,
-                "updated_at": datetime.now(
-                    TIMEZONE
-                ).isoformat(),
-            })
-            .eq(
-                "telegram_user_id",
-                user_id
-            )
-            .execute()
-        )
+        supabase.table("bot_users").update({
+            "team_name": team_name,
+            "updated_at": datetime.now(
+                TIMEZONE
+            ).isoformat(),
+        }).eq(
+            "telegram_user_id",
+            user_id
+        ).execute()
 
     except Exception as e:
-        print(f"Supabase update name error: {e}")
+        print(
+            f"Supabase update team error: {e}",
+            flush=True
+        )
+
         raise RuntimeError(
             "Gagal menyimpan nama tim."
         )
 
 
 # =========================================================
-# REPORT DATA
+# DATABASE REPORT
 # =========================================================
 
 def get_report_items(user_id):
@@ -171,22 +194,65 @@ def get_report_items(user_id):
             supabase
             .table("report_items")
             .select(
-                "id, number, category, status, created_at"
+                "id, telegram_user_id, number, category, status"
             )
             .eq(
                 "telegram_user_id",
                 user_id
             )
-            .order("id")
+            .order(
+                "id",
+                desc=False
+            )
             .execute()
         )
 
         return response.data or []
 
     except Exception as e:
-        print(f"Supabase get items error: {e}")
+        print(
+            f"Supabase get items error: {e}",
+            flush=True
+        )
+
         raise RuntimeError(
             "Gagal mengambil data report."
+        )
+
+
+def get_report_item(user_id, item_id):
+    try:
+        response = (
+            supabase
+            .table("report_items")
+            .select(
+                "id, telegram_user_id, number, category, status"
+            )
+            .eq(
+                "id",
+                item_id
+            )
+            .eq(
+                "telegram_user_id",
+                user_id
+            )
+            .limit(1)
+            .execute()
+        )
+
+        if response.data:
+            return response.data[0]
+
+        return None
+
+    except Exception as e:
+        print(
+            f"Supabase get item error: {e}",
+            flush=True
+        )
+
+        raise RuntimeError(
+            "Gagal mengambil data."
         )
 
 
@@ -197,50 +263,153 @@ def add_report_item(
     status
 ):
     try:
-        (
-            supabase
-            .table("report_items")
-            .insert({
-                "telegram_user_id": user_id,
-                "number": number,
-                "category": category,
-                "status": status,
-            })
-            .execute()
-        )
+        supabase.table("report_items").insert({
+            "telegram_user_id": user_id,
+            "number": number,
+            "category": category,
+            "status": status,
+        }).execute()
 
     except Exception as e:
-        print(f"Supabase add item error: {e}")
+        print(
+            f"Supabase add item error: {e}",
+            flush=True
+        )
+
         raise RuntimeError(
-            "Gagal menyimpan data report."
+            "Gagal menambahkan data."
+        )
+
+
+def update_report_number(
+    user_id,
+    item_id,
+    number
+):
+    try:
+        supabase.table("report_items").update({
+            "number": number,
+        }).eq(
+            "id",
+            item_id
+        ).eq(
+            "telegram_user_id",
+            user_id
+        ).execute()
+
+    except Exception as e:
+        print(
+            f"Supabase update number error: {e}",
+            flush=True
+        )
+
+        raise RuntimeError(
+            "Gagal mengubah nomor."
+        )
+
+
+def update_report_category(
+    user_id,
+    item_id,
+    category
+):
+    try:
+        supabase.table("report_items").update({
+            "category": category,
+        }).eq(
+            "id",
+            item_id
+        ).eq(
+            "telegram_user_id",
+            user_id
+        ).execute()
+
+    except Exception as e:
+        print(
+            f"Supabase update category error: {e}",
+            flush=True
+        )
+
+        raise RuntimeError(
+            "Gagal mengubah kategori."
+        )
+
+
+def update_report_status(
+    user_id,
+    item_id,
+    status
+):
+    try:
+        supabase.table("report_items").update({
+            "status": status,
+        }).eq(
+            "id",
+            item_id
+        ).eq(
+            "telegram_user_id",
+            user_id
+        ).execute()
+
+    except Exception as e:
+        print(
+            f"Supabase update status error: {e}",
+            flush=True
+        )
+
+        raise RuntimeError(
+            "Gagal mengubah status."
+        )
+
+
+def delete_report_item(
+    user_id,
+    item_id
+):
+    try:
+        supabase.table("report_items").delete().eq(
+            "id",
+            item_id
+        ).eq(
+            "telegram_user_id",
+            user_id
+        ).execute()
+
+    except Exception as e:
+        print(
+            f"Supabase delete item error: {e}",
+            flush=True
+        )
+
+        raise RuntimeError(
+            "Gagal menghapus data."
         )
 
 
 def delete_all_report_items(user_id):
     try:
-        (
-            supabase
-            .table("report_items")
-            .delete()
-            .eq(
-                "telegram_user_id",
-                user_id
-            )
-            .execute()
-        )
+        supabase.table("report_items").delete().eq(
+            "telegram_user_id",
+            user_id
+        ).execute()
 
     except Exception as e:
-        print(f"Supabase delete items error: {e}")
+        print(
+            f"Supabase reset error: {e}",
+            flush=True
+        )
+
         raise RuntimeError(
             "Gagal menghapus data report."
         )
 
 
 # =========================================================
-# MENU
+# KEYBOARD MENU
 # =========================================================
 
 def menu_keyboard():
+
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
@@ -256,39 +425,46 @@ def menu_keyboard():
         ],
         [
             InlineKeyboardButton(
-                "👤 Ubah Nama",
-                callback_data="nama"
+                "✏️ Edit Data",
+                callback_data="edit_list"
             )
         ],
         [
             InlineKeyboardButton(
-                "🗑️ Hapus Semua",
-                callback_data="hapus"
+                "🗑️ Hapus Data",
+                callback_data="delete_list"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "👤 Ubah Nama Tim",
+                callback_data="nama"
             )
         ],
     ])
 
 
-def kategori_keyboard():
+def kategori_keyboard(prefix="cat"):
+
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
                 "IB Reguler",
-                callback_data="cat_ib_reguler"
+                callback_data=f"{prefix}_ib_reguler"
             ),
             InlineKeyboardButton(
                 "IB Sameday",
-                callback_data="cat_ib_sameday"
+                callback_data=f"{prefix}_ib_sameday"
             ),
         ],
         [
             InlineKeyboardButton(
                 "MT Reguler",
-                callback_data="cat_mt_reguler"
+                callback_data=f"{prefix}_mt_reguler"
             ),
             InlineKeyboardButton(
                 "MT Sameday",
-                callback_data="cat_mt_sameday"
+                callback_data=f"{prefix}_mt_sameday"
             ),
         ],
         [
@@ -300,56 +476,62 @@ def kategori_keyboard():
     ])
 
 
-def status_keyboard():
+def status_keyboard(prefix="status"):
+
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
                 "✅ Done",
-                callback_data="status_done"
+                callback_data=f"{prefix}_done"
             ),
             InlineKeyboardButton(
                 "⏳ Pending",
-                callback_data="status_pending"
+                callback_data=f"{prefix}_pending"
             ),
             InlineKeyboardButton(
                 "❌ Cancel",
-                callback_data="status_cancel"
+                callback_data=f"{prefix}_cancel"
             ),
-        ]
+        ],
+        [
+            InlineKeyboardButton(
+                "⬅️ Kembali",
+                callback_data="menu"
+            )
+        ],
     ])
 
 
 # =========================================================
-# BUAT REPORT
+# MENU UTAMA
 # =========================================================
 
-def buat_report(user_id, team_name):
+def menu_text(data):
 
-    items = get_report_items(user_id)
-
-    teks = (
-        f"Report Progress {tanggal_sekarang()}\n\n"
-        f"({team_name})\n\n"
+    return (
+        "📋 <b>REPORT PROGRESS</b>\n\n"
+        f"📅 {tanggal_sekarang()}\n"
+        f"👤 Nama: <b>{escape(data['team_name'])}</b>\n\n"
+        "Silakan pilih menu:"
     )
 
-    for key, nama_kategori in KATEGORI.items():
 
-        teks += f"{nama_kategori}\n\n"
+async def tampilkan_menu(update, data):
 
-        for item in items:
+    await update.message.reply_text(
+        menu_text(data),
+        parse_mode="HTML",
+        reply_markup=menu_keyboard()
+    )
 
-            if item["category"] == key:
 
-                status_nama, emoji = STATUS[
-                    item["status"]
-                ]
+async def tampilkan_menu_callback(query, data):
 
-                teks += (
-                    f"• {item['number']} "
-                    f"({status_nama}){emoji}\n\n"
-                )
-
-    return teks.strip()
+    await query.edit_message_text(
+        menu_text(data),
+        parse_mode="HTML",
+        reply_markup=menu_keyboard()
+    )
 
 
 # =========================================================
@@ -363,11 +545,19 @@ async def start(
 
     user = update.effective_user
 
-    if not user:
+    if not user or not update.message:
         return
+
+    # Bersihkan proses sebelumnya
+    context.user_data.clear()
 
     data = get_user(user)
 
+    nama_user = escape(
+        user.first_name or "Teman"
+    )
+
+    # User belum memiliki nama tim
     if data["team_name"] == "Belum diatur":
 
         context.user_data[
@@ -375,33 +565,134 @@ async def start(
         ] = True
 
         await update.message.reply_text(
-            "📋 *REPORT PROGRESS*\n\n"
-            f"📅 Tanggal: {tanggal_sekarang()}\n\n"
-            "👤 Kamu belum memiliki nama tim/report.\n\n"
-            "Silakan kirim nama tim kamu.\n\n"
+            "👋 <b>Selamat datang, "
+            f"{nama_user}!</b>\n\n"
+            "📋 <b>REPORT PROGRESS</b>\n\n"
+            "Sebelum mulai, silakan isi "
+            "nama tim kamu di bawah.\n\n"
             "Contoh:\n"
-            "`Bagas-Toni`",
-            parse_mode="Markdown"
+            "👉 <code>Bagas-Toni</code>\n\n"
+            "Nama ini akan digunakan sebagai "
+            "nama pada report kamu.",
+            parse_mode="HTML"
         )
 
         return
 
     await update.message.reply_text(
-        "🟢 *VERSI BARU 0510*\n\n"
-        "Kode terbaru berhasil dijalankan.\n\n"
-        f"📋 *REPORT PROGRESS*\n\n"
-        f"📅 {tanggal_sekarang()}\n"
-        f"👤 Nama: {data['team_name']}\n\n"
-        "Silakan pilih menu:",
-        parse_mode="Markdown",
+        menu_text(data),
+        parse_mode="HTML",
         reply_markup=menu_keyboard()
     )
 
+
 # =========================================================
-# MENU COMMAND
+# COMMAND MENU
 # =========================================================
 
 async def menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    user = update.effective_user
+
+    if not user or not update.message:
+        return
+
+    data = get_user(user)
+
+    if data["team_name"] == "Belum diatur":
+
+        context.user_data.clear()
+
+        context.user_data[
+            "waiting_name"
+        ] = True
+
+        await update.message.reply_text(
+            "👋 Silakan isi nama tim kamu.\n\n"
+            "Contoh:\n"
+            "<code>Bagas-Toni</code>",
+            parse_mode="HTML"
+        )
+
+        return
+
+    context.user_data.clear()
+
+    await update.message.reply_text(
+        menu_text(data),
+        parse_mode="HTML",
+        reply_markup=menu_keyboard()
+    )
+
+
+# =========================================================
+# BUAT REPORT
+# =========================================================
+
+def buat_report(user_id, team_name):
+
+    items = get_report_items(user_id)
+
+    teks = (
+        f"📋 <b>Report Progress "
+        f"{tanggal_sekarang()}</b>\n\n"
+        f"👥 <b>{escape(team_name)}</b>\n\n"
+    )
+
+    for category_key, category_name in KATEGORI.items():
+
+        category_items = [
+            item
+            for item in items
+            if item["category"] == category_key
+        ]
+
+        teks += (
+            f"<b>{category_name}</b>\n"
+        )
+
+        if not category_items:
+            teks += "—\n\n"
+            continue
+
+        for item in category_items:
+
+            status_name, emoji = STATUS[
+                item["status"]
+            ]
+
+            teks += (
+                f"• <code>{escape(item['number'])}</code> "
+                f"({status_name}) {emoji}\n"
+            )
+
+        teks += "\n"
+
+    return teks.rstrip()
+
+
+async def kirim_report_callback(
+    query,
+    user_id,
+    team_name
+):
+
+    teks = buat_report(
+        user_id,
+        team_name
+    )
+
+    await query.edit_message_text(
+        teks,
+        parse_mode="HTML",
+        reply_markup=menu_keyboard()
+    )
+
+
+async def command_report(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
@@ -413,18 +704,31 @@ async def menu(
 
     data = get_user(user)
 
+    if data["team_name"] == "Belum diatur":
+
+        await update.message.reply_text(
+            "⚠️ Silakan atur nama tim terlebih dahulu "
+            "dengan /start.",
+        )
+
+        return
+
+    context.user_data.clear()
+
+    teks = buat_report(
+        user.id,
+        data["team_name"]
+    )
+
     await update.message.reply_text(
-        "📋 *REPORT PROGRESS*\n\n"
-        f"📅 {tanggal_sekarang()}\n"
-        f"👤 Nama: {data['team_name']}\n\n"
-        "Pilih menu:",
-        parse_mode="Markdown",
+        teks,
+        parse_mode="HTML",
         reply_markup=menu_keyboard()
     )
 
 
 # =========================================================
-# TOMBOL
+# CALLBACK UTAMA
 # =========================================================
 
 async def tombol(
@@ -447,63 +751,81 @@ async def tombol(
 
     pilihan = query.data
 
-    # KEMBALI
+
+    # -----------------------------------------------------
+    # MENU
+    # -----------------------------------------------------
+
     if pilihan == "menu":
 
-        await query.edit_message_text(
-            "📋 *REPORT PROGRESS*\n\n"
-            f"📅 {tanggal_sekarang()}\n"
-            f"👤 Nama: {data['team_name']}\n\n"
-            "Pilih menu:",
-            parse_mode="Markdown",
-            reply_markup=menu_keyboard()
+        context.user_data.clear()
+
+        await tampilkan_menu_callback(
+            query,
+            data
         )
 
         return
 
+
+    # -----------------------------------------------------
     # TAMBAH DATA
+    # -----------------------------------------------------
+
     if pilihan == "tambah":
 
+        context.user_data.clear()
+
         await query.edit_message_text(
-            "📂 Pilih kategori:",
+            "➕ <b>TAMBAH DATA</b>\n\n"
+            "Pilih kategori:",
+            parse_mode="HTML",
             reply_markup=kategori_keyboard()
         )
 
         return
 
-    # KATEGORI
+
     if pilihan.startswith("cat_"):
 
-        kategori = pilihan.replace(
+        category = pilihan.replace(
             "cat_",
-            ""
+            "",
+            1
         )
 
         context.user_data[
             "category"
-        ] = kategori
+        ] = category
 
         context.user_data[
             "waiting_number"
         ] = True
 
         await query.edit_message_text(
-            f"📂 *{KATEGORI[kategori]}*\n\n"
-            "Silakan kirim nomor yang ingin "
-            "ditambahkan.\n\n"
+            "➕ <b>TAMBAH DATA</b>\n\n"
+            f"📂 Kategori: "
+            f"<b>{KATEGORI[category]}</b>\n\n"
+            "Silakan kirim nomor.\n\n"
             "Contoh:\n"
-            "`6277046`",
-            parse_mode="Markdown"
+            "<code>1234567</code>\n\n"
+            "⚠️ Masukkan angka saja.",
+            parse_mode="HTML"
         )
 
         return
 
-    # STATUS
+
+    # -----------------------------------------------------
+    # STATUS TAMBAH
+    # -----------------------------------------------------
+
     if pilihan.startswith("status_"):
 
         status = pilihan.replace(
             "status_",
-            ""
+            "",
+            1
         )
 
         category = context.user_data.get(
@@ -517,8 +839,8 @@ async def tombol(
         if not category or not number:
 
             await query.edit_message_text(
-                "⚠️ Data sesi tidak ditemukan.\n\n"
-                "Silakan mulai lagi dari menu.",
+                "⚠️ Data tidak ditemukan.\n\n"
+                "Silakan mulai kembali.",
                 reply_markup=menu_keyboard()
             )
 
@@ -531,83 +853,532 @@ async def tombol(
             status
         )
 
-        context.user_data.pop(
-            "category",
-            None
-        )
-
-        context.user_data.pop(
-            "number",
-            None
-        )
-
-        context.user_data.pop(
-            "waiting_number",
-            None
-        )
-
-        status_nama, emoji = STATUS[
+        status_name, emoji = STATUS[
             status
         ]
 
+        context.user_data.clear()
+
         await query.edit_message_text(
-            "✅ *Data berhasil ditambahkan!*\n\n"
-            f"Nomor: `{number}`\n"
-            f"Kategori: {KATEGORI[category]}\n"
-            f"Status: {status_nama} {emoji}\n\n"
-            "Kamu bisa menambahkan data lagi.",
-            parse_mode="Markdown",
+            "✅ <b>DATA BERHASIL DITAMBAHKAN</b>\n\n"
+            f"🔢 Nomor: <code>{escape(number)}</code>\n"
+            f"📂 Kategori: "
+            f"<b>{KATEGORI[category]}</b>\n"
+            f"📊 Status: "
+            f"<b>{status_name}</b> {emoji}\n\n"
+            "Data sudah tersimpan.",
+            parse_mode="HTML",
             reply_markup=menu_keyboard()
         )
 
         return
 
+
+    # -----------------------------------------------------
     # REPORT
+    # -----------------------------------------------------
+
     if pilihan == "report":
 
-        teks = buat_report(
+        context.user_data.clear()
+
+        await kirim_report_callback(
+            query,
             user_id,
             data["team_name"]
         )
 
-        await query.edit_message_text(
-            f"```text\n{teks}\n```",
-            parse_mode="Markdown",
-            reply_markup=menu_keyboard()
-        )
-
         return
 
+
+    # -----------------------------------------------------
     # UBAH NAMA
+    # -----------------------------------------------------
+
     if pilihan == "nama":
+
+        context.user_data.clear()
 
         context.user_data[
             "waiting_name"
         ] = True
 
         await query.edit_message_text(
-            "👤 *Ubah Nama Report*\n\n"
-            f"Nama sekarang: `{data['team_name']}`\n\n"
-            "Kirim nama baru.\n\n"
+            "👤 <b>UBAH NAMA TIM</b>\n\n"
+            f"Nama sekarang:\n"
+            f"<b>{escape(data['team_name'])}</b>\n\n"
+            "Silakan kirim nama tim baru.\n\n"
             "Contoh:\n"
-            "`Bagas-Toni`",
-            parse_mode="Markdown"
+            "<code>Bagas-Toni</code>",
+            parse_mode="HTML"
         )
 
         return
 
-    # HAPUS SEMUA
-    if pilihan == "hapus":
 
-        delete_all_report_items(
-            user_id
-        )
+    # =====================================================
+    # EDIT DATA
+    # =====================================================
+
+    if pilihan == "edit_list":
+
+        items = get_report_items(user_id)
+
+        if not items:
+
+            await query.edit_message_text(
+                "✏️ <b>EDIT DATA</b>\n\n"
+                "Belum ada data yang bisa diedit.",
+                parse_mode="HTML",
+                reply_markup=menu_keyboard()
+            )
+
+            return
+
+        keyboard = []
+
+        for item in items:
+
+            status_name, emoji = STATUS[
+                item["status"]
+            ]
+
+            label = (
+                f"{item['number']} • "
+                f"{KATEGORI[item['category']]} • "
+                f"{emoji}"
+            )
+
+            # Batasi panjang tombol
+            if len(label) > 55:
+                label = label[:52] + "..."
+
+            keyboard.append([
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"edit_{item['id']}"
+                )
+            ])
+
+        keyboard.append([
+            InlineKeyboardButton(
+                "⬅️ Kembali",
+                callback_data="menu"
+            )
+        ])
 
         await query.edit_message_text(
-            "🗑️ *Semua data nomor berhasil "
-            "dihapus.*\n\n"
-            "Nama tim tetap tersimpan.",
-            parse_mode="Markdown",
+            "✏️ <b>EDIT DATA</b>\n\n"
+            "Pilih data yang ingin diedit:",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
+        )
+
+        return
+
+
+    # -----------------------------------------------------
+    # PILIH DATA EDIT
+    # -----------------------------------------------------
+
+    if pilihan.startswith("edit_"):
+
+        try:
+            item_id = int(
+                pilihan.replace(
+                    "edit_",
+                    "",
+                    1
+                )
+            )
+
+        except ValueError:
+            return
+
+        item = get_report_item(
+            user_id,
+            item_id
+        )
+
+        if not item:
+
+            await query.edit_message_text(
+                "⚠️ Data tidak ditemukan.",
+                reply_markup=menu_keyboard()
+            )
+
+            return
+
+        context.user_data[
+            "edit_item_id"
+        ] = item_id
+
+        status_name, emoji = STATUS[
+            item["status"]
+        ]
+
+        await query.edit_message_text(
+            "✏️ <b>EDIT DATA</b>\n\n"
+            f"🔢 Nomor: "
+            f"<code>{escape(item['number'])}</code>\n"
+            f"📂 Kategori: "
+            f"<b>{KATEGORI[item['category']]}</b>\n"
+            f"📊 Status: "
+            f"<b>{status_name}</b> {emoji}\n\n"
+            "Apa yang ingin diubah?",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🔢 Nomor",
+                        callback_data="edit_number"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📂 Kategori",
+                        callback_data="edit_category"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📊 Status",
+                        callback_data="edit_status"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ Kembali",
+                        callback_data="edit_list"
+                    )
+                ],
+            ])
+        )
+
+        return
+
+
+    # -----------------------------------------------------
+    # EDIT NOMOR
+    # -----------------------------------------------------
+
+    if pilihan == "edit_number":
+
+        item_id = context.user_data.get(
+            "edit_item_id"
+        )
+
+        if not item_id:
+            return
+
+        context.user_data[
+            "waiting_edit_number"
+        ] = True
+
+        await query.edit_message_text(
+            "🔢 <b>UBAH NOMOR</b>\n\n"
+            "Silakan kirim nomor baru.\n\n"
+            "Contoh:\n"
+            "<code>1234567</code>",
+            parse_mode="HTML"
+        )
+
+        return
+
+
+    # -----------------------------------------------------
+    # EDIT KATEGORI
+    # -----------------------------------------------------
+
+    if pilihan == "edit_category":
+
+        await query.edit_message_text(
+            "📂 <b>UBAH KATEGORI</b>\n\n"
+            "Pilih kategori baru:",
+            parse_mode="HTML",
+            reply_markup=kategori_keyboard(
+                prefix="editcat"
+            )
+        )
+
+        return
+
+
+    if pilihan.startswith("editcat_"):
+
+        item_id = context.user_data.get(
+            "edit_item_id"
+        )
+
+        if not item_id:
+            return
+
+        category = pilihan.replace(
+            "editcat_",
+            "",
+            1
+        )
+
+        item = get_report_item(
+            user_id,
+            item_id
+        )
+
+        if not item:
+            return
+
+        update_report_category(
+            user_id,
+            item_id,
+            category
+        )
+
+        context.user_data.clear()
+
+        await query.edit_message_text(
+            "✅ <b>KATEGORI BERHASIL DIUBAH</b>\n\n"
+            f"🔢 Nomor: "
+            f"<code>{escape(item['number'])}</code>\n"
+            f"📂 Kategori baru: "
+            f"<b>{KATEGORI[category]}</b>",
+            parse_mode="HTML",
+            reply_markup=menu_keyboard()
+        )
+
+        return
+
+
+    # -----------------------------------------------------
+    # EDIT STATUS
+    # -----------------------------------------------------
+
+    if pilihan == "edit_status":
+
+        await query.edit_message_text(
+            "📊 <b>UBAH STATUS</b>\n\n"
+            "Pilih status baru:",
+            parse_mode="HTML",
+            reply_markup=status_keyboard(
+                prefix="editstatus"
+            )
+        )
+
+        return
+
+
+    if pilihan.startswith("editstatus_"):
+
+        item_id = context.user_data.get(
+            "edit_item_id"
+        )
+
+        if not item_id:
+            return
+
+        status = pilihan.replace(
+            "editstatus_",
+            "",
+            1
+        )
+
+        item = get_report_item(
+            user_id,
+            item_id
+        )
+
+        if not item:
+            return
+
+        update_report_status(
+            user_id,
+            item_id,
+            status
+        )
+
+        status_name, emoji = STATUS[
+            status
+        ]
+
+        context.user_data.clear()
+
+        await query.edit_message_text(
+            "✅ <b>STATUS BERHASIL DIUBAH</b>\n\n"
+            f"🔢 Nomor: "
+            f"<code>{escape(item['number'])}</code>\n"
+            f"📊 Status baru: "
+            f"<b>{status_name}</b> {emoji}",
+            parse_mode="HTML",
+            reply_markup=menu_keyboard()
+        )
+
+        return
+
+
+    # =====================================================
+    # HAPUS DATA
+    # =====================================================
+
+    if pilihan == "delete_list":
+
+        items = get_report_items(user_id)
+
+        if not items:
+
+            await query.edit_message_text(
+                "🗑️ <b>HAPUS DATA</b>\n\n"
+                "Belum ada data yang bisa dihapus.",
+                parse_mode="HTML",
+                reply_markup=menu_keyboard()
+            )
+
+            return
+
+        keyboard = []
+
+        for item in items:
+
+            status_name, emoji = STATUS[
+                item["status"]
+            ]
+
+            label = (
+                f"{item['number']} • "
+                f"{KATEGORI[item['category']]} • "
+                f"{emoji}"
+            )
+
+            if len(label) > 55:
+                label = label[:52] + "..."
+
+            keyboard.append([
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"del_{item['id']}"
+                )
+            ])
+
+        keyboard.append([
+            InlineKeyboardButton(
+                "⬅️ Kembali",
+                callback_data="menu"
+            )
+        ])
+
+        await query.edit_message_text(
+            "🗑️ <b>HAPUS DATA</b>\n\n"
+            "Pilih data yang ingin dihapus:",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
+        )
+
+        return
+
+
+    # -----------------------------------------------------
+    # KONFIRMASI HAPUS
+    # -----------------------------------------------------
+
+    if pilihan.startswith("del_"):
+
+        try:
+            item_id = int(
+                pilihan.replace(
+                    "del_",
+                    "",
+                    1
+                )
+            )
+
+        except ValueError:
+            return
+
+        item = get_report_item(
+            user_id,
+            item_id
+        )
+
+        if not item:
+
+            await query.edit_message_text(
+                "⚠️ Data tidak ditemukan.",
+                reply_markup=menu_keyboard()
+            )
+
+            return
+
+        await query.edit_message_text(
+            "⚠️ <b>KONFIRMASI HAPUS</b>\n\n"
+            "Apakah kamu yakin ingin menghapus:\n\n"
+            f"🔢 Nomor: "
+            f"<code>{escape(item['number'])}</code>\n"
+            f"📂 Kategori: "
+            f"<b>{KATEGORI[item['category']]}</b>\n\n"
+            "Data yang dihapus tidak dapat "
+            "dikembalikan.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "❌ Ya, Hapus",
+                        callback_data=f"confirmdel_{item_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⬅️ Batal",
+                        callback_data="delete_list"
+                    )
+                ],
+            ])
+        )
+
+        return
+
+
+    if pilihan.startswith("confirmdel_"):
+
+        try:
+            item_id = int(
+                pilihan.replace(
+                    "confirmdel_",
+                    "",
+                    1
+                )
+            )
+
+        except ValueError:
+            return
+
+        item = get_report_item(
+            user_id,
+            item_id
+        )
+
+        if not item:
+
+            await query.edit_message_text(
+                "⚠️ Data sudah tidak ditemukan.",
+                reply_markup=menu_keyboard()
+            )
+
+            return
+
+        delete_report_item(
+            user_id,
+            item_id
+        )
+
+        context.user_data.clear()
+
+        await query.edit_message_text(
+            "✅ <b>DATA BERHASIL DIHAPUS</b>\n\n"
+            f"Nomor <code>{escape(item['number'])}</code> "
+            "telah dihapus.",
+            parse_mode="HTML",
             reply_markup=menu_keyboard()
         )
 
@@ -615,7 +1386,7 @@ async def tombol(
 
 
 # =========================================================
-# PESAN TEXT
+# PESAN TEKS
 # =========================================================
 
 async def pesan(
@@ -625,14 +1396,18 @@ async def pesan(
 
     user = update.effective_user
 
-    if not user:
+    if not user or not update.message:
         return
-
-    user_id = user.id
 
     teks = update.message.text.strip()
 
-    # NAMA
+    user_id = user.id
+
+
+    # =====================================================
+    # INPUT NAMA TIM
+    # =====================================================
+
     if context.user_data.get(
         "waiting_name"
     ):
@@ -640,8 +1415,8 @@ async def pesan(
         if len(teks) < 2:
 
             await update.message.reply_text(
-                "⚠️ Nama terlalu pendek.\n\n"
-                "Silakan kirim nama tim yang benar."
+                "⚠️ Nama tim terlalu pendek.\n\n"
+                "Silakan masukkan minimal 2 karakter."
             )
 
             return
@@ -649,7 +1424,8 @@ async def pesan(
         if len(teks) > 50:
 
             await update.message.reply_text(
-                "⚠️ Nama maksimal 50 karakter."
+                "⚠️ Nama tim terlalu panjang.\n\n"
+                "Maksimal 50 karakter."
             )
 
             return
@@ -659,21 +1435,26 @@ async def pesan(
             teks
         )
 
-        context.user_data.pop(
-            "waiting_name",
-            None
-        )
+        context.user_data.clear()
+
+        data = get_user(user)
 
         await update.message.reply_text(
-            "✅ *Nama berhasil disimpan!*\n\n"
-            f"Nama: *{teks}*",
-            parse_mode="Markdown",
+            "✅ <b>Nama tim berhasil disimpan!</b>\n\n"
+            f"👥 Tim: <b>{escape(teks)}</b>\n\n"
+            "Sekarang kamu bisa mulai membuat "
+            "report progress.",
+            parse_mode="HTML",
             reply_markup=menu_keyboard()
         )
 
         return
 
-    # NOMOR
+
+    # =====================================================
+    # INPUT NOMOR BARU
+    # =====================================================
+
     if context.user_data.get(
         "waiting_number"
     ):
@@ -681,19 +1462,21 @@ async def pesan(
         if not teks.isdigit():
 
             await update.message.reply_text(
-                "⚠️ Nomor harus berupa angka.\n\n"
+                "⚠️ <b>Nomor tidak valid.</b>\n\n"
+                "Nomor harus berupa angka saja.\n\n"
                 "Contoh:\n"
-                "`6277046`",
-                parse_mode="Markdown"
+                "<code>1234567</code>",
+                parse_mode="HTML"
             )
 
             return
 
-        if len(teks) < 4 or len(teks) > 20:
+        if not 4 <= len(teks) <= 20:
 
             await update.message.reply_text(
-                "⚠️ Nomor harus terdiri dari "
-                "4 sampai 20 digit."
+                "⚠️ Panjang nomor tidak valid.\n\n"
+                "Nomor harus terdiri dari "
+                "4 sampai 20 angka."
             )
 
             return
@@ -702,51 +1485,110 @@ async def pesan(
             "number"
         ] = teks
 
-        context.user_data.pop(
-            "waiting_number",
-            None
-        )
+        context.user_data[
+            "waiting_number"
+        ] = False
 
         await update.message.reply_text(
-            f"🔢 Nomor: *{teks}*\n\n"
-            "Pilih status:",
-            parse_mode="Markdown",
+            "🔢 <b>Nomor diterima</b>\n\n"
+            f"Nomor: <code>{escape(teks)}</code>\n\n"
+            "📊 Pilih status:",
+            parse_mode="HTML",
             reply_markup=status_keyboard()
         )
 
         return
 
-    # PESAN BIASA
-    await update.message.reply_text(
-        "Gunakan menu di bawah:",
-        reply_markup=menu_keyboard()
-    )
 
+    # =====================================================
+    # INPUT NOMOR SAAT EDIT
+    # =====================================================
 
-# =========================================================
-# COMMAND REPORT
-# =========================================================
+    if context.user_data.get(
+        "waiting_edit_number"
+    ):
 
-async def command_report(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+        item_id = context.user_data.get(
+            "edit_item_id"
+        )
 
-    user = update.effective_user
+        if not item_id:
 
-    if not user:
+            context.user_data.clear()
+
+            await update.message.reply_text(
+                "⚠️ Data edit tidak ditemukan.\n\n"
+                "Silakan mulai lagi dari menu.",
+                reply_markup=menu_keyboard()
+            )
+
+            return
+
+        if not teks.isdigit():
+
+            await update.message.reply_text(
+                "⚠️ <b>Nomor tidak valid.</b>\n\n"
+                "Masukkan angka saja.\n\n"
+                "Contoh:\n"
+                "<code>1234567</code>",
+                parse_mode="HTML"
+            )
+
+            return
+
+        if not 4 <= len(teks) <= 20:
+
+            await update.message.reply_text(
+                "⚠️ Panjang nomor tidak valid.\n\n"
+                "Nomor harus terdiri dari "
+                "4 sampai 20 angka."
+            )
+
+            return
+
+        item = get_report_item(
+            user_id,
+            item_id
+        )
+
+        if not item:
+
+            context.user_data.clear()
+
+            await update.message.reply_text(
+                "⚠️ Data tidak ditemukan.",
+                reply_markup=menu_keyboard()
+            )
+
+            return
+
+        old_number = item["number"]
+
+        update_report_number(
+            user_id,
+            item_id,
+            teks
+        )
+
+        context.user_data.clear()
+
+        await update.message.reply_text(
+            "✅ <b>NOMOR BERHASIL DIUBAH</b>\n\n"
+            f"<code>{escape(old_number)}</code>"
+            f" → <code>{escape(teks)}</code>",
+            parse_mode="HTML",
+            reply_markup=menu_keyboard()
+        )
+
         return
 
-    data = get_user(user)
 
-    teks = buat_report(
-        user.id,
-        data["team_name"]
-    )
+    # =====================================================
+    # PESAN BIASA
+    # =====================================================
 
     await update.message.reply_text(
-        f"```text\n{teks}\n```",
-        parse_mode="Markdown",
+        "Silakan gunakan menu di bawah:",
         reply_markup=menu_keyboard()
     )
 
@@ -760,21 +1602,23 @@ async def command_nama(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    context.user_data.clear()
+
     context.user_data[
         "waiting_name"
     ] = True
 
     await update.message.reply_text(
-        "👤 *Ubah Nama Report*\n\n"
-        "Kirim nama baru.\n\n"
+        "👤 <b>UBAH NAMA TIM</b>\n\n"
+        "Silakan kirim nama tim baru.\n\n"
         "Contoh:\n"
-        "`Bagas-Toni`",
-        parse_mode="Markdown"
+        "<code>Bagas-Toni</code>",
+        parse_mode="HTML"
     )
 
 
 # =========================================================
-# COMMAND RESET
+# RESET
 # =========================================================
 
 async def command_reset(
@@ -791,11 +1635,13 @@ async def command_reset(
         user.id
     )
 
+    context.user_data.clear()
+
     await update.message.reply_text(
-        "🗑️ *Semua nomor dan status kamu "
-        "telah dihapus.*\n\n"
-        "Nama tim tetap tersimpan.",
-        parse_mode="Markdown",
+        "🗑️ <b>SEMUA DATA REPORT KAMU DIHAPUS</b>\n\n"
+        "Nama tim tetap tersimpan.\n\n"
+        "⚠️ Data pengguna lain tidak terpengaruh.",
+        parse_mode="HTML",
         reply_markup=menu_keyboard()
     )
 
@@ -810,8 +1656,8 @@ async def error_handler(
 ):
 
     print(
-        "ERROR:",
-        repr(context.error)
+        f"ERROR: {context.error!r}",
+        flush=True
     )
 
 
@@ -820,26 +1666,53 @@ async def error_handler(
 # =========================================================
 
 def main():
-    print("=== MASUK MAIN 0510 ===", flush=True)
 
-    print("====================================")
-    print("REPORT PROGRESS BOT")
-    print("Bot sedang berjalan...")
-    print("Zona waktu: Asia/Jakarta")
-    print("Penyimpanan: Supabase")
-    print("MODE BARU 0510")
-    print("====================================")
+    print(
+        "====================================",
+        flush=True
+    )
+
+    print(
+        "REPORT PROGRESS BOT",
+        flush=True
+    )
+
+    print(
+        "Bot sedang berjalan...",
+        flush=True
+    )
+
+    print(
+        "Zona waktu: Asia/Jakarta",
+        flush=True
+    )
+
+    print(
+        "Penyimpanan: Supabase",
+        flush=True
+    )
+
+    print(
+        "MODE FINAL - USER REPORT",
+        flush=True
+    )
+
+    print(
+        "====================================",
+        flush=True
+    )
+
 
     app = (
         Application
         .builder()
         .token(TOKEN)
         .build()
-        
     )
 
 
-    print("=== APP TELEGRAM BERHASIL 0510 ===", flush=True)
+    # Commands
+
     app.add_handler(
         CommandHandler(
             "start",
@@ -875,11 +1748,17 @@ def main():
         )
     )
 
+
+    # Buttons
+
     app.add_handler(
         CallbackQueryHandler(
             tombol
         )
     )
+
+
+    # Text
 
     app.add_handler(
         MessageHandler(
@@ -888,13 +1767,24 @@ def main():
         )
     )
 
+
+    # Error
+
     app.add_error_handler(
         error_handler
     )
-    
+
+
+    print(
+        "Bot siap menerima pesan Telegram.",
+        flush=True
+    )
+
 
     app.run_polling()
 
+
+# =========================================================
 
 if __name__ == "__main__":
     main()
