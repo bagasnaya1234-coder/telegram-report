@@ -820,7 +820,7 @@ def main():
     print("Bot sedang berjalan...")
     print("Zona waktu: Asia/Jakarta")
     print("Penyimpanan: Supabase")
-    print("Mode: Per Telegram User")
+    print("MODE BARU 0510")
     print("====================================")
 
     app = (
