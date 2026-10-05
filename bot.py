@@ -14,11 +14,6 @@ from telegram.ext import (
     filters,
 )
 
-
-# =========================================================
-# PENGATURAN
-# =========================================================
-
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -32,10 +27,10 @@ if not SUPABASE_URL:
 if not SUPABASE_KEY:
     raise RuntimeError("SUPABASE_KEY belum diatur.")
 
-# Buat client Supabase menggunakan Secret API Key.
-# Key ini HARUS disimpan sebagai Environment Variable di Render,
-# jangan ditulis di dalam kode dan jangan di-upload ke GitHub.
-supabase: Client = create_client(SUPABASE_URL.rstrip("/"), SUPABASE_KEY)
+supabase: Client = create_client(
+    SUPABASE_URL.rstrip("/"),
+    SUPABASE_KEY
+)
 
 TIMEZONE = ZoneInfo("Asia/Jakarta")
 
@@ -69,71 +64,7 @@ STATUS = {
 
 
 # =========================================================
-# DATABASE SUPABASE
-# =========================================================
-
-def get_chat_data(chat_id):
-    """Ambil data satu chat dari Supabase."""
-    chat_id = str(chat_id)
-
-    try:
-        response = (
-            supabase
-            .table("bot_data")
-            .select("id, name, data")
-            .eq("id", chat_id)
-            .limit(1)
-            .execute()
-        )
-
-        if response.data:
-            row = response.data[0]
-            stored = row.get("data") or {}
-            return {
-                "name": row.get("name") or "Bagas-Toni",
-                "items": stored.get("items", []),
-            }
-
-        # Data baru: buat record pertama.
-        new_chat = {
-            "name": "Bagas-Toni",
-            "items": [],
-        }
-
-        supabase.table("bot_data").insert({
-            "id": chat_id,
-            "name": new_chat["name"],
-            "data": new_chat,
-        }).execute()
-
-        return new_chat
-
-    except Exception as e:
-        print(f"Supabase get error: {e}")
-        raise RuntimeError("Gagal mengambil data dari Supabase.")
-
-
-def save_chat_data(chat_id, chat):
-    """Simpan/perbarui data satu chat di Supabase."""
-    chat_id = str(chat_id)
-
-    try:
-        supabase.table("bot_data").upsert({
-            "id": chat_id,
-            "name": chat["name"],
-            "data": {
-                "items": chat["items"],
-            },
-            "updated_at": datetime.now(TIMEZONE).isoformat(),
-        }).execute()
-
-    except Exception as e:
-        print(f"Supabase save error: {e}")
-        raise RuntimeError("Gagal menyimpan data ke Supabase.")
-
-
-# =========================================================
-# TANGGAL WIB
+# WAKTU
 # =========================================================
 
 def tanggal_sekarang():
@@ -147,7 +78,136 @@ def tanggal_sekarang():
 
 
 # =========================================================
-# MENU UTAMA
+# DATA USER
+# =========================================================
+
+def get_user(telegram_user):
+    user_id = telegram_user.id
+
+    try:
+        response = (
+            supabase
+            .table("bot_users")
+            .select(
+                "telegram_user_id, username, first_name, team_name"
+            )
+            .eq("telegram_user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+
+        if response.data:
+            return response.data[0]
+
+        data = {
+            "telegram_user_id": user_id,
+            "username": telegram_user.username,
+            "first_name": telegram_user.first_name or "",
+            "team_name": "Belum diatur",
+        }
+
+        response = (
+            supabase
+            .table("bot_users")
+            .insert(data)
+            .execute()
+        )
+
+        return response.data[0]
+
+    except Exception as e:
+        print(f"Supabase get_user error: {e}")
+        raise RuntimeError(
+            "Gagal mengambil data user dari Supabase."
+        )
+
+
+def update_team_name(user_id, team_name):
+    try:
+        (
+            supabase
+            .table("bot_users")
+            .update({
+                "team_name": team_name,
+                "updated_at": datetime.now(TIMEZONE).isoformat(),
+            })
+            .eq("telegram_user_id", user_id)
+            .execute()
+        )
+
+    except Exception as e:
+        print(f"Supabase update name error: {e}")
+        raise RuntimeError(
+            "Gagal menyimpan nama tim."
+        )
+
+
+# =========================================================
+# DATA REPORT
+# =========================================================
+
+def get_report_items(user_id):
+    try:
+        response = (
+            supabase
+            .table("report_items")
+            .select(
+                "id, number, category, status, created_at"
+            )
+            .eq("telegram_user_id", user_id)
+            .order("id")
+            .execute()
+        )
+
+        return response.data or []
+
+    except Exception as e:
+        print(f"Supabase get items error: {e}")
+        raise RuntimeError(
+            "Gagal mengambil data report."
+        )
+
+
+def add_report_item(user_id, number, category, status):
+    try:
+        (
+            supabase
+            .table("report_items")
+            .insert({
+                "telegram_user_id": user_id,
+                "number": number,
+                "category": category,
+                "status": status,
+            })
+            .execute()
+        )
+
+    except Exception as e:
+        print(f"Supabase add item error: {e}")
+        raise RuntimeError(
+            "Gagal menyimpan data report."
+        )
+
+
+def delete_all_report_items(user_id):
+    try:
+        (
+            supabase
+            .table("report_items")
+            .delete()
+            .eq("telegram_user_id", user_id)
+            .execute()
+        )
+
+    except Exception as e:
+        print(f"Supabase delete items error: {e}")
+        raise RuntimeError(
+            "Gagal menghapus data report."
+        )
+
+
+# =========================================================
+# KEYBOARD
 # =========================================================
 
 def menu_keyboard():
@@ -230,25 +290,28 @@ def status_keyboard():
 
 
 # =========================================================
-# FORMAT REPORT
+# REPORT
 # =========================================================
 
-def buat_report(chat_id):
-    chat = get_chat_data(chat_id)
-
-    nama = chat["name"]
+def buat_report(user_id, team_name):
+    items = get_report_items(user_id)
 
     teks = (
         f"Report Progress {tanggal_sekarang()}\n\n"
-        f"({nama})\n\n"
+        f"({team_name})\n\n"
     )
 
     for key, nama_kategori in KATEGORI.items():
+
         teks += f"{nama_kategori}\n\n"
 
-        for item in chat["items"]:
+        for item in items:
+
             if item["category"] == key:
-                status_nama, emoji = STATUS[item["status"]]
+
+                status_nama, emoji = STATUS[
+                    item["status"]
+                ]
 
                 teks += (
                     f"• {item['number']} "
@@ -263,40 +326,58 @@ def buat_report(chat_id):
 # =========================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    chat = get_chat_data(chat_id)
 
-    teks = (
-        "📋 *REPORT PROGRESS*\n\n"
-        f"📅 Tanggal: {tanggal_sekarang()}\n"
-        f"👤 Nama: {chat['name']}\n\n"
-        "Silakan pilih menu:"
-    )
+    user = update.effective_user
+
+    if not user:
+        return
+
+    data = get_user(user)
+
+    if data["team_name"] == "Belum diatur":
+
+        context.user_data["waiting_name"] = True
+
+        await update.message.reply_text(
+            "📋 *REPORT PROGRESS*\n\n"
+            f"📅 Tanggal: {tanggal_sekarang()}\n\n"
+            "👤 Kamu belum memiliki nama tim/report.\n\n"
+            "Silakan kirim nama tim kamu.\n\n"
+            "Contoh:\n"
+            "`Bagas-Toni`",
+            parse_mode="Markdown"
+        )
+
+        return
 
     await update.message.reply_text(
-        teks,
+        "📋 *REPORT PROGRESS*\n\n"
+        f"📅 {tanggal_sekarang()}\n"
+        f"👤 Nama: {data['team_name']}\n\n"
+        "Silakan pilih menu:",
         parse_mode="Markdown",
         reply_markup=menu_keyboard()
     )
 
 
 # =========================================================
-# /MENU
+# MENU
 # =========================================================
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    chat = get_chat_data(chat_id)
 
-    teks = (
-        "📋 *REPORT PROGRESS*\n\n"
-        f"📅 {tanggal_sekarang()}\n"
-        f"👤 {chat['name']}\n\n"
-        "Pilih menu:"
-    )
+    user = update.effective_user
+
+    if not user:
+        return
+
+    data = get_user(user)
 
     await update.message.reply_text(
-        teks,
+        "📋 *REPORT PROGRESS*\n\n"
+        f"📅 {tanggal_sekarang()}\n"
+        f"👤 Nama: {data['team_name']}\n\n"
+        "Pilih menu:",
         parse_mode="Markdown",
         reply_markup=menu_keyboard()
     )
@@ -307,38 +388,50 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================================
 
 async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     query = update.callback_query
+
     await query.answer()
 
-    chat_id = query.message.chat.id
-    chat = get_chat_data(chat_id)
+    user = update.effective_user
+
+    if not user:
+        return
+
+    user_id = user.id
+
+    data = get_user(user)
 
     pilihan = query.data
 
     # -------------------------
-    # MENU
+    # KEMBALI KE MENU
     # -------------------------
 
     if pilihan == "menu":
+
         await query.edit_message_text(
             "📋 *REPORT PROGRESS*\n\n"
             f"📅 {tanggal_sekarang()}\n"
-            f"👤 {chat['name']}\n\n"
+            f"👤 {data['team_name']}\n\n"
             "Pilih menu:",
             parse_mode="Markdown",
             reply_markup=menu_keyboard()
         )
+
         return
 
     # -------------------------
-    # TAMBAH
+    # TAMBAH DATA
     # -------------------------
 
     if pilihan == "tambah":
+
         await query.edit_message_text(
             "📂 Pilih kategori:",
             reply_markup=kategori_keyboard()
         )
+
         return
 
     # -------------------------
@@ -346,6 +439,7 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # -------------------------
 
     if pilihan.startswith("cat_"):
+
         kategori = pilihan.replace("cat_", "")
 
         context.user_data["category"] = kategori
@@ -358,47 +452,64 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "`6277046`",
             parse_mode="Markdown"
         )
+
         return
 
     # -------------------------
-    # STATUS
+    # PILIH STATUS
     # -------------------------
 
     if pilihan.startswith("status_"):
+
         status = pilihan.replace("status_", "")
 
         category = context.user_data.get("category")
         number = context.user_data.get("number")
 
         if not category or not number:
+
             await query.edit_message_text(
-                "Data tidak ditemukan. Silakan mulai lagi dari menu.",
+                "⚠️ Data sesi tidak ditemukan.\n\n"
+                "Silakan mulai lagi dari menu.",
                 reply_markup=menu_keyboard()
             )
+
             return
 
-        chat["items"].append({
-            "number": number,
-            "category": category,
-            "status": status
-        })
+        add_report_item(
+            user_id,
+            number,
+            category,
+            status
+        )
 
-        save_chat_data(chat_id, chat)
+        context.user_data.pop(
+            "category",
+            None
+        )
 
-        context.user_data.pop("category", None)
-        context.user_data.pop("number", None)
-        context.user_data.pop("waiting_number", None)
+        context.user_data.pop(
+            "number",
+            None
+        )
+
+        context.user_data.pop(
+            "waiting_number",
+            None
+        )
 
         status_nama, emoji = STATUS[status]
 
         await query.edit_message_text(
-            f"✅ Data berhasil ditambahkan!\n\n"
-            f"Nomor: {number}\n"
+            "✅ *Data berhasil ditambahkan!*\n\n"
+            f"Nomor: `{number}`\n"
             f"Kategori: {KATEGORI[category]}\n"
             f"Status: {status_nama} {emoji}\n\n"
-            "Mau tambah data lagi?",
+            "Kamu bisa menambahkan data lagi.",
+            parse_mode="Markdown",
             reply_markup=menu_keyboard()
         )
+
         return
 
     # -------------------------
@@ -406,13 +517,18 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # -------------------------
 
     if pilihan == "report":
-        teks = buat_report(chat_id)
+
+        teks = buat_report(
+            user_id,
+            data["team_name"]
+        )
 
         await query.edit_message_text(
             f"```text\n{teks}\n```",
             parse_mode="Markdown",
             reply_markup=menu_keyboard()
         )
+
         return
 
     # -------------------------
@@ -420,59 +536,89 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # -------------------------
 
     if pilihan == "nama":
+
         context.user_data["waiting_name"] = True
 
         await query.edit_message_text(
             "👤 *Ubah Nama Report*\n\n"
-            f"Nama sekarang: `{chat['name']}`\n\n"
+            f"Nama sekarang: `{data['team_name']}`\n\n"
             "Kirim nama baru.\n\n"
             "Contoh:\n"
             "`Bagas-Toni`",
             parse_mode="Markdown"
         )
+
         return
 
     # -------------------------
-    # HAPUS
+    # HAPUS SEMUA
     # -------------------------
 
     if pilihan == "hapus":
-        chat["items"] = []
 
-        save_chat_data(chat_id, chat)
+        delete_all_report_items(user_id)
 
         await query.edit_message_text(
-            "🗑️ Semua data nomor berhasil dihapus.\n\n"
-            "Nama dan pengaturan tetap tersimpan.",
+            "🗑️ *Semua data nomor berhasil dihapus.*\n\n"
+            "Nama tim tetap tersimpan.",
+            parse_mode="Markdown",
             reply_markup=menu_keyboard()
         )
+
         return
 
 
 # =========================================================
-# PESAN TEKS
+# PESAN TEXT
 # =========================================================
 
 async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    chat = get_chat_data(chat_id)
+
+    user = update.effective_user
+
+    if not user:
+        return
+
+    user_id = user.id
 
     teks = update.message.text.strip()
 
     # -------------------------
-    # MENUNGGU NAMA
+    # NAMA TIM
     # -------------------------
 
     if context.user_data.get("waiting_name"):
-        chat["name"] = teks
 
-        save_chat_data(chat_id, chat)
+        if len(teks) < 2:
 
-        context.user_data.pop("waiting_name", None)
+            await update.message.reply_text(
+                "⚠️ Nama terlalu pendek.\n\n"
+                "Silakan kirim nama tim yang benar."
+            )
+
+            return
+
+        if len(teks) > 50:
+
+            await update.message.reply_text(
+                "⚠️ Nama maksimal 50 karakter."
+            )
+
+            return
+
+        update_team_name(
+            user_id,
+            teks
+        )
+
+        context.user_data.pop(
+            "waiting_name",
+            None
+        )
 
         await update.message.reply_text(
-            f"✅ Nama berhasil diubah menjadi:\n\n"
-            f"*{teks}*",
+            f"✅ *Nama berhasil disimpan!*\n\n"
+            f"Nama: *{teks}*",
             parse_mode="Markdown",
             reply_markup=menu_keyboard()
         )
@@ -480,21 +626,37 @@ async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # -------------------------
-    # MENUNGGU NOMOR
+    # NOMOR
     # -------------------------
 
     if context.user_data.get("waiting_number"):
-        # Hanya menerima angka
+
         if not teks.isdigit():
+
             await update.message.reply_text(
                 "⚠️ Nomor harus berupa angka.\n\n"
-                "Contoh: `6277046`",
+                "Contoh:\n"
+                "`6277046`",
                 parse_mode="Markdown"
             )
+
+            return
+
+        if len(teks) < 4 or len(teks) > 20:
+
+            await update.message.reply_text(
+                "⚠️ Nomor harus terdiri dari "
+                "4 sampai 20 digit."
+            )
+
             return
 
         context.user_data["number"] = teks
-        context.user_data.pop("waiting_number", None)
+
+        context.user_data.pop(
+            "waiting_number",
+            None
+        )
 
         await update.message.reply_text(
             f"🔢 Nomor: *{teks}*\n\n"
@@ -516,13 +678,25 @@ async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================================================
-# /REPORT
+# COMMAND REPORT
 # =========================================================
 
-async def command_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
+async def command_report(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    teks = buat_report(chat_id)
+    user = update.effective_user
+
+    if not user:
+        return
+
+    data = get_user(user)
+
+    teks = buat_report(
+        user.id,
+        data["team_name"]
+    )
 
     await update.message.reply_text(
         f"```text\n{teks}\n```",
@@ -532,14 +706,19 @@ async def command_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================================================
-# /NAMA
+# COMMAND NAMA
 # =========================================================
 
-async def command_nama(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def command_nama(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
     context.user_data["waiting_name"] = True
 
     await update.message.reply_text(
-        "👤 Kirim nama baru untuk report.\n\n"
+        "👤 *Ubah Nama Report*\n\n"
+        "Kirim nama baru.\n\n"
         "Contoh:\n"
         "`Bagas-Toni`",
         parse_mode="Markdown"
@@ -547,45 +726,88 @@ async def command_nama(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================================================
-# /RESET
+# COMMAND RESET
 # =========================================================
 
-async def command_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    chat = get_chat_data(chat_id)
+async def command_reset(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
-    chat["items"] = []
+    user = update.effective_user
 
-    save_chat_data(chat_id, chat)
+    if not user:
+        return
+
+    delete_all_report_items(user.id)
 
     await update.message.reply_text(
-        "🗑️ Semua nomor dan status telah dihapus.\n\n"
-        "Nama tetap tersimpan.",
+        "🗑️ *Semua nomor dan status kamu telah dihapus.*\n\n"
+        "Nama tim tetap tersimpan.",
+        parse_mode="Markdown",
         reply_markup=menu_keyboard()
     )
 
 
 # =========================================================
-# JALANKAN BOT
+# ERROR HANDLER
+# =========================================================
+
+async def error_handler(
+    update: object,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    print(
+        "ERROR:",
+        repr(context.error)
+    )
+
+
+# =========================================================
+# MAIN
 # =========================================================
 
 def main():
+
     print("====================================")
     print("REPORT PROGRESS BOT")
     print("Bot sedang berjalan...")
     print("Zona waktu: Asia/Jakarta")
     print("Penyimpanan: Supabase")
+    print("Mode: Per Telegram User")
     print("====================================")
 
-    app = Application.builder().token(TOKEN).build()
+    app = (
+        Application
+        .builder()
+        .token(TOKEN)
+        .build()
+    )
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", menu))
-    app.add_handler(CommandHandler("report", command_report))
-    app.add_handler(CommandHandler("nama", command_nama))
-    app.add_handler(CommandHandler("reset", command_reset))
+    app.add_handler(
+        CommandHandler("start", start)
+    )
 
-    app.add_handler(CallbackQueryHandler(tombol))
+    app.add_handler(
+        CommandHandler("menu", menu)
+    )
+
+    app.add_handler(
+        CommandHandler("report", command_report)
+    )
+
+    app.add_handler(
+        CommandHandler("nama", command_nama)
+    )
+
+    app.add_handler(
+        CommandHandler("reset", command_reset)
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(tombol)
+    )
 
     app.add_handler(
         MessageHandler(
@@ -594,7 +816,12 @@ def main():
         )
     )
 
+    app.add_error_handler(
+        error_handler
+    )
+
     print("Mode: polling")
+
     app.run_polling()
 
 
