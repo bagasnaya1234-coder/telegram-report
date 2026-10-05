@@ -511,7 +511,6 @@ def buat_report_text(
 
     now = datetime.now(TIMEZONE)
 
-    # Nama bulan Indonesia
     bulan = [
         "Januari",
         "Februari",
@@ -533,7 +532,6 @@ def buat_report_text(
         f"{now.year}"
     )
 
-    # Kelompokkan data berdasarkan kategori
     grouped = {}
 
     for item in items:
@@ -546,6 +544,42 @@ def buat_report_text(
         grouped[category].append(item)
 
     lines = []
+
+    # HEADER
+    lines.append(
+        "REPORT PROGRESS"
+    )
+
+    lines.append("")
+
+    lines.append(
+        f"Tim: {team_name}"
+    )
+
+    lines.append(
+        f"Tanggal: {tanggal}"
+    )
+
+    lines.append("")
+
+    # SEMUA KATEGORI
+    for category in KATEGORI:
+
+        lines.append(
+            KATEGORI[category]
+        )
+
+        category_items = grouped.get(
+            category,
+            []
+        )
+
+        # KATEGORI KOSONG
+        if not category_items:
+
+            lines.append("-")
+
+       
 
     # =====================================================
     # HEADER
