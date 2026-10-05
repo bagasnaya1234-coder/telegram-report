@@ -511,14 +511,29 @@ def buat_report_text(
 
     now = datetime.now(TIMEZONE)
 
-    tanggal = now.strftime(
-        "%d/%m/%Y"
+    # Nama bulan Indonesia
+    bulan = [
+        "Januari",
+        "Februari",
+        "Maret",
+        "April",
+        "Mei",
+        "Juni",
+        "Juli",
+        "Agustus",
+        "September",
+        "Oktober",
+        "November",
+        "Desember"
+    ]
+
+    tanggal = (
+        f"{now.day:02d} "
+        f"{bulan[now.month - 1]} "
+        f"{now.year}"
     )
 
-    jam = now.strftime(
-        "%H:%M"
-    )
-
+    # Kelompokkan data berdasarkan kategori
     grouped = {}
 
     for item in items:
@@ -532,40 +547,50 @@ def buat_report_text(
 
     lines = []
 
+    # =====================================================
+    # HEADER
+    # =====================================================
+
     lines.append(
-        "📋 REPORT PROGRESS"
+        "REPORT PROGRESS"
     )
 
     lines.append("")
 
     lines.append(
-        f"👥 Tim: {team_name}"
+        f"Tim: {team_name}"
     )
 
     lines.append(
-        f"📅 Tanggal: {tanggal}"
-    )
-
-    lines.append(
-        f"🕐 Jam: {jam}"
+        f"Tanggal: {tanggal}"
     )
 
     lines.append("")
+
+    # =====================================================
+    # SEMUA KATEGORI
+    # =====================================================
 
     for category in KATEGORI:
+
+        lines.append(
+            KATEGORI[category]
+        )
 
         category_items = grouped.get(
             category,
             []
         )
 
+        # Jika kategori kosong
         if not category_items:
+
+            lines.append("-")
+            lines.append("")
+
             continue
 
-        lines.append(
-            f"📂 {KATEGORI[category]}"
-        )
-
+        # Jika ada data
         for item in category_items:
 
             status_data = STATUS.get(
@@ -577,19 +602,17 @@ def buat_report_text(
             emoji = status_data[1]
 
             lines.append(
-                f"  • {item['number']} "
-                f"— {status_name} {emoji}"
+                f"•{item['number']} "
+                f"({status_name}){emoji}"
             )
 
+            # Jarak antar nomor
+            lines.append("")
+
+        # Jarak sebelum kategori berikutnya
         lines.append("")
 
-    if not items:
-
-        lines.append(
-            "Belum ada data."
-        )
-
-    return "\n".join(lines)
+    return "\n".join(lines).strip()
 
 
 async def kirim_report_message(
