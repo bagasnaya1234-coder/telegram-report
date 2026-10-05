@@ -1,3 +1,5 @@
+print("=== BOT START TEST 0510 ===", flush=True)
+
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
