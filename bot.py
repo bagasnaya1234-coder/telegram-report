@@ -382,14 +382,15 @@ async def start(
         return
 
     await update.message.reply_text(
-        "📋 *REPORT PROGRESS*\n\n"
+        "🟢 *VERSI BARU 0510*\n\n"
+        "Kode terbaru berhasil dijalankan.\n\n"
+        f"📋 *REPORT PROGRESS*\n\n"
         f"📅 {tanggal_sekarang()}\n"
         f"👤 Nama: {data['team_name']}\n\n"
         "Silakan pilih menu:",
         parse_mode="Markdown",
         reply_markup=menu_keyboard()
     )
-
 
 # =========================================================
 # MENU COMMAND
