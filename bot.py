@@ -545,11 +545,11 @@ def buat_report_text(
 
     lines = []
 
-    # HEADER
-    lines.append(
-        "REPORT PROGRESS"
-    )
+    # =========================
+    # JUDUL
+    # =========================
 
+    lines.append("REPORT PROGRESS")
     lines.append("")
 
     lines.append(
@@ -562,48 +562,9 @@ def buat_report_text(
 
     lines.append("")
 
-    # SEMUA KATEGORI
-    for category in KATEGORI:
-
-        lines.append(
-            KATEGORI[category]
-        )
-
-        category_items = grouped.get(
-            category,
-            []
-        )
-
-        # KATEGORI KOSONG
-        if not category_items:
-
-            lines.append("-")
-
-       
-
-    # =====================================================
-    # HEADER
-    # =====================================================
-
-    lines.append(
-        "REPORT PROGRESS"
-    )
-
-    lines.append("")
-
-    lines.append(
-        f"Tim: {team_name}"
-    )
-
-    lines.append(
-        f"Tanggal: {tanggal}"
-    )
-
-    lines.append("")
-
-    # =====================================================
-    # SEMUA KATEGORI
-    # =====================================================
+    # =========================
+    # KATEGORI
+    # =========================
 
     for category in KATEGORI:
 
@@ -616,7 +577,7 @@ def buat_report_text(
             []
         )
 
-        # Jika kategori kosong
+        # Kalau kategori kosong
         if not category_items:
 
             lines.append("-")
@@ -624,8 +585,10 @@ def buat_report_text(
 
             continue
 
-        # Jika ada data
-        for item in category_items:
+        # Kalau kategori ada isinya
+        for index, item in enumerate(
+            category_items
+        ):
 
             status_data = STATUS.get(
                 item["status"],
@@ -640,10 +603,11 @@ def buat_report_text(
                 f"({status_name}){emoji}"
             )
 
-            # Jarak antar nomor
-            lines.append("")
+            # Spasi antar nomor
+            if index < len(category_items) - 1:
+                lines.append("")
 
-        # Jarak sebelum kategori berikutnya
+        # Spasi sebelum kategori berikutnya
         lines.append("")
 
     return "\n".join(lines).strip()
