@@ -820,6 +820,7 @@ async def error_handler(
 # =========================================================
 
 def main():
+    print("=== MASUK MAIN 0510 ===", flush=True)
 
     print("====================================")
     print("REPORT PROGRESS BOT")
