@@ -786,7 +786,7 @@ async def tombol(
         return
 
 
-    if pilihan.startswith("cat_"):
+    if pilihan.startswith("edit_") and pilihan[5:].isdigit():
 
         category = pilihan.replace(
             "cat_",
