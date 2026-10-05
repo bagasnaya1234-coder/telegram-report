@@ -14,6 +14,10 @@ from telegram.ext import (
     filters,
 )
 
+# =========================================================
+# KONFIGURASI
+# =========================================================
+
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -33,6 +37,11 @@ supabase: Client = create_client(
 )
 
 TIMEZONE = ZoneInfo("Asia/Jakarta")
+
+
+# =========================================================
+# DATA
+# =========================================================
 
 BULAN = [
     "Januari",
@@ -78,7 +87,7 @@ def tanggal_sekarang():
 
 
 # =========================================================
-# DATA USER
+# USER
 # =========================================================
 
 def get_user(telegram_user):
@@ -129,9 +138,14 @@ def update_team_name(user_id, team_name):
             .table("bot_users")
             .update({
                 "team_name": team_name,
-                "updated_at": datetime.now(TIMEZONE).isoformat(),
+                "updated_at": datetime.now(
+                    TIMEZONE
+                ).isoformat(),
             })
-            .eq("telegram_user_id", user_id)
+            .eq(
+                "telegram_user_id",
+                user_id
+            )
             .execute()
         )
 
@@ -143,7 +157,7 @@ def update_team_name(user_id, team_name):
 
 
 # =========================================================
-# DATA REPORT
+# REPORT DATA
 # =========================================================
 
 def get_report_items(user_id):
@@ -154,7 +168,10 @@ def get_report_items(user_id):
             .select(
                 "id, number, category, status, created_at"
             )
-            .eq("telegram_user_id", user_id)
+            .eq(
+                "telegram_user_id",
+                user_id
+            )
             .order("id")
             .execute()
         )
@@ -168,7 +185,12 @@ def get_report_items(user_id):
         )
 
 
-def add_report_item(user_id, number, category, status):
+def add_report_item(
+    user_id,
+    number,
+    category,
+    status
+):
     try:
         (
             supabase
@@ -195,7 +217,10 @@ def delete_all_report_items(user_id):
             supabase
             .table("report_items")
             .delete()
-            .eq("telegram_user_id", user_id)
+            .eq(
+                "telegram_user_id",
+                user_id
+            )
             .execute()
         )
 
@@ -207,7 +232,7 @@ def delete_all_report_items(user_id):
 
 
 # =========================================================
-# KEYBOARD
+# MENU
 # =========================================================
 
 def menu_keyboard():
@@ -290,10 +315,11 @@ def status_keyboard():
 
 
 # =========================================================
-# REPORT
+# BUAT REPORT
 # =========================================================
 
 def buat_report(user_id, team_name):
+
     items = get_report_items(user_id)
 
     teks = (
@@ -322,10 +348,13 @@ def buat_report(user_id, team_name):
 
 
 # =========================================================
-# /START
+# START
 # =========================================================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     user = update.effective_user
 
@@ -336,7 +365,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data["team_name"] == "Belum diatur":
 
-        context.user_data["waiting_name"] = True
+        context.user_data[
+            "waiting_name"
+        ] = True
 
         await update.message.reply_text(
             "📋 *REPORT PROGRESS*\n\n"
@@ -361,10 +392,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================================================
-# MENU
+# MENU COMMAND
 # =========================================================
 
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     user = update.effective_user
 
@@ -387,7 +421,10 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # TOMBOL
 # =========================================================
 
-async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def tombol(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     query = update.callback_query
 
@@ -404,16 +441,13 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     pilihan = query.data
 
-    # -------------------------
-    # KEMBALI KE MENU
-    # -------------------------
-
+    # KEMBALI
     if pilihan == "menu":
 
         await query.edit_message_text(
             "📋 *REPORT PROGRESS*\n\n"
             f"📅 {tanggal_sekarang()}\n"
-            f"👤 {data['team_name']}\n\n"
+            f"👤 Nama: {data['team_name']}\n\n"
             "Pilih menu:",
             parse_mode="Markdown",
             reply_markup=menu_keyboard()
@@ -421,10 +455,7 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # -------------------------
     # TAMBAH DATA
-    # -------------------------
-
     if pilihan == "tambah":
 
         await query.edit_message_text(
@@ -434,20 +465,26 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # -------------------------
-    # PILIH KATEGORI
-    # -------------------------
-
+    # KATEGORI
     if pilihan.startswith("cat_"):
 
-        kategori = pilihan.replace("cat_", "")
+        kategori = pilihan.replace(
+            "cat_",
+            ""
+        )
 
-        context.user_data["category"] = kategori
-        context.user_data["waiting_number"] = True
+        context.user_data[
+            "category"
+        ] = kategori
+
+        context.user_data[
+            "waiting_number"
+        ] = True
 
         await query.edit_message_text(
             f"📂 *{KATEGORI[kategori]}*\n\n"
-            "Silakan kirim nomor yang ingin ditambahkan.\n\n"
+            "Silakan kirim nomor yang ingin "
+            "ditambahkan.\n\n"
             "Contoh:\n"
             "`6277046`",
             parse_mode="Markdown"
@@ -455,16 +492,21 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # -------------------------
-    # PILIH STATUS
-    # -------------------------
-
+    # STATUS
     if pilihan.startswith("status_"):
 
-        status = pilihan.replace("status_", "")
+        status = pilihan.replace(
+            "status_",
+            ""
+        )
 
-        category = context.user_data.get("category")
-        number = context.user_data.get("number")
+        category = context.user_data.get(
+            "category"
+        )
+
+        number = context.user_data.get(
+            "number"
+        )
 
         if not category or not number:
 
@@ -498,7 +540,9 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None
         )
 
-        status_nama, emoji = STATUS[status]
+        status_nama, emoji = STATUS[
+            status
+        ]
 
         await query.edit_message_text(
             "✅ *Data berhasil ditambahkan!*\n\n"
@@ -512,10 +556,7 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # -------------------------
     # REPORT
-    # -------------------------
-
     if pilihan == "report":
 
         teks = buat_report(
@@ -531,13 +572,12 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # -------------------------
     # UBAH NAMA
-    # -------------------------
-
     if pilihan == "nama":
 
-        context.user_data["waiting_name"] = True
+        context.user_data[
+            "waiting_name"
+        ] = True
 
         await query.edit_message_text(
             "👤 *Ubah Nama Report*\n\n"
@@ -550,16 +590,16 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # -------------------------
     # HAPUS SEMUA
-    # -------------------------
-
     if pilihan == "hapus":
 
-        delete_all_report_items(user_id)
+        delete_all_report_items(
+            user_id
+        )
 
         await query.edit_message_text(
-            "🗑️ *Semua data nomor berhasil dihapus.*\n\n"
+            "🗑️ *Semua data nomor berhasil "
+            "dihapus.*\n\n"
             "Nama tim tetap tersimpan.",
             parse_mode="Markdown",
             reply_markup=menu_keyboard()
@@ -572,7 +612,10 @@ async def tombol(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # PESAN TEXT
 # =========================================================
 
-async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def pesan(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     user = update.effective_user
 
@@ -583,11 +626,10 @@ async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     teks = update.message.text.strip()
 
-    # -------------------------
-    # NAMA TIM
-    # -------------------------
-
-    if context.user_data.get("waiting_name"):
+    # NAMA
+    if context.user_data.get(
+        "waiting_name"
+    ):
 
         if len(teks) < 2:
 
@@ -617,7 +659,7 @@ async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_text(
-            f"✅ *Nama berhasil disimpan!*\n\n"
+            "✅ *Nama berhasil disimpan!*\n\n"
             f"Nama: *{teks}*",
             parse_mode="Markdown",
             reply_markup=menu_keyboard()
@@ -625,11 +667,10 @@ async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # -------------------------
     # NOMOR
-    # -------------------------
-
-    if context.user_data.get("waiting_number"):
+    if context.user_data.get(
+        "waiting_number"
+    ):
 
         if not teks.isdigit():
 
@@ -651,7 +692,9 @@ async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             return
 
-        context.user_data["number"] = teks
+        context.user_data[
+            "number"
+        ] = teks
 
         context.user_data.pop(
             "waiting_number",
@@ -667,10 +710,7 @@ async def pesan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    # -------------------------
     # PESAN BIASA
-    # -------------------------
-
     await update.message.reply_text(
         "Gunakan menu di bawah:",
         reply_markup=menu_keyboard()
@@ -714,7 +754,9 @@ async def command_nama(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    context.user_data["waiting_name"] = True
+    context.user_data[
+        "waiting_name"
+    ] = True
 
     await update.message.reply_text(
         "👤 *Ubah Nama Report*\n\n"
@@ -739,10 +781,13 @@ async def command_reset(
     if not user:
         return
 
-    delete_all_report_items(user.id)
+    delete_all_report_items(
+        user.id
+    )
 
     await update.message.reply_text(
-        "🗑️ *Semua nomor dan status kamu telah dihapus.*\n\n"
+        "🗑️ *Semua nomor dan status kamu "
+        "telah dihapus.*\n\n"
         "Nama tim tetap tersimpan.",
         parse_mode="Markdown",
         reply_markup=menu_keyboard()
@@ -786,27 +831,44 @@ def main():
     )
 
     app.add_handler(
-        CommandHandler("start", start)
+        CommandHandler(
+            "start",
+            start
+        )
     )
 
     app.add_handler(
-        CommandHandler("menu", menu)
+        CommandHandler(
+            "menu",
+            menu
+        )
     )
 
     app.add_handler(
-        CommandHandler("report", command_report)
+        CommandHandler(
+            "report",
+            command_report
+        )
     )
 
     app.add_handler(
-        CommandHandler("nama", command_nama)
+        CommandHandler(
+            "nama",
+            command_nama
+        )
     )
 
     app.add_handler(
-        CommandHandler("reset", command_reset)
+        CommandHandler(
+            "reset",
+            command_reset
+        )
     )
 
     app.add_handler(
-        CallbackQueryHandler(tombol)
+        CallbackQueryHandler(
+            tombol
+        )
     )
 
     app.add_handler(
@@ -819,8 +881,7 @@ def main():
     app.add_error_handler(
         error_handler
     )
-
-    print("Mode: polling")
+    
 
     app.run_polling()
 
