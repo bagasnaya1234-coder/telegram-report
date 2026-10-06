@@ -17,7 +17,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-
 from supabase import create_client
 
 
@@ -59,10 +58,11 @@ supabase = create_client(
 # =========================================================
 
 KATEGORI = {
-    "ib_reguler": "IB Reguler",
-    "ib_sameday": "IB Sameday",
-    "mt_reguler": "MT Reguler",
-    "mt_sameday": "MT Sameday",
+    "ib_reguler": "IB REGULER",
+    "ib_sameday": "IB SAMEDAY",
+    "ib_h0": "IB H+0",
+    "mt_reguler": "MT REGULER",
+    "mt_h0": "MT H+0",
 }
 
 
@@ -71,10 +71,20 @@ KATEGORI = {
 # =========================================================
 
 STATUS = {
-    "done": ("Done", "✅"),
-    "pending": ("Pending", "⏳"),
-    "cancel": ("Cancel", "❌"),
+    "done": ("DONE", "✅"),
+    "pending": ("PENDING", "⏳"),
+    "cancel": ("CANCEL", "❌"),
 }
+
+
+# =========================================================
+# TANGGAL WIB
+# =========================================================
+
+def today():
+    return datetime.now(
+        TIMEZONE
+    ).date().isoformat()
 
 
 # =========================================================
@@ -83,15 +93,13 @@ STATUS = {
 
 def get_user(user):
 
-    user_id = user.id
-
     result = (
         supabase
         .table("bot_users")
         .select("*")
         .eq(
             "telegram_user_id",
-            user_id
+            user.id
         )
         .limit(1)
         .execute()
@@ -111,7 +119,7 @@ def get_user(user):
             ).isoformat(),
         }).eq(
             "telegram_user_id",
-            user_id
+            user.id
         ).execute()
 
         return row
@@ -120,7 +128,7 @@ def get_user(user):
         supabase
         .table("bot_users")
         .insert({
-            "telegram_user_id": user_id,
+            "telegram_user_id": user.id,
             "username": user.username,
             "first_name": user.first_name,
             "team_name": "Belum diatur",
@@ -154,7 +162,7 @@ def update_team_name(
 
 
 # =========================================================
-# DATABASE REPORT
+# DATABASE REPORT HARIAN
 # =========================================================
 
 def get_report_items(user_id):
@@ -166,6 +174,10 @@ def get_report_items(user_id):
         .eq(
             "telegram_user_id",
             user_id
+        )
+        .eq(
+            "report_date",
+            today()
         )
         .order("id")
         .execute()
@@ -186,6 +198,10 @@ def get_report_item(
         .eq(
             "telegram_user_id",
             user_id
+        )
+        .eq(
+            "report_date",
+            today()
         )
         .eq(
             "id",
@@ -213,6 +229,7 @@ def add_report_item(
         .table("report_items")
         .insert({
             "telegram_user_id": user_id,
+            "report_date": today(),
             "number": number,
             "category": category,
             "status": status,
@@ -236,6 +253,10 @@ def update_report_number(
         .eq(
             "telegram_user_id",
             user_id
+        )
+        .eq(
+            "report_date",
+            today()
         )
         .eq(
             "id",
@@ -262,6 +283,10 @@ def update_report_category(
             user_id
         )
         .eq(
+            "report_date",
+            today()
+        )
+        .eq(
             "id",
             item_id
         )
@@ -286,6 +311,10 @@ def update_report_status(
             user_id
         )
         .eq(
+            "report_date",
+            today()
+        )
+        .eq(
             "id",
             item_id
         )
@@ -307,6 +336,10 @@ def delete_report_item(
             user_id
         )
         .eq(
+            "report_date",
+            today()
+        )
+        .eq(
             "id",
             item_id
         )
@@ -326,12 +359,16 @@ def delete_all_report_items(
             "telegram_user_id",
             user_id
         )
+        .eq(
+            "report_date",
+            today()
+        )
         .execute()
     )
 
 
 # =========================================================
-# KEYBOARD MENU
+# MENU
 # =========================================================
 
 def menu_keyboard():
@@ -348,15 +385,12 @@ def menu_keyboard():
             ],
             [
                 "👤 Ubah Nama Tim",
+                "📚 Tutorial",
             ],
         ],
         resize_keyboard=True
     )
 
-
-# =========================================================
-# INLINE MENU
-# =========================================================
 
 def inline_menu_keyboard():
 
@@ -390,12 +424,18 @@ def inline_menu_keyboard():
                 "👤 Ubah Nama Tim",
                 callback_data="cb_teamname"
             )
-        ]
+        ],
+        [
+            InlineKeyboardButton(
+                "📚 Tutorial",
+                callback_data="cb_tutor"
+            )
+        ],
     ])
 
 
 # =========================================================
-# KEYBOARD KATEGORI
+# KATEGORI
 # =========================================================
 
 def kategori_keyboard(
@@ -405,22 +445,28 @@ def kategori_keyboard(
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "IB Reguler",
+                "IB REGULER",
                 callback_data=f"{prefix}_ib_reguler"
             ),
             InlineKeyboardButton(
-                "IB Sameday",
+                "IB SAMEDAY",
                 callback_data=f"{prefix}_ib_sameday"
             ),
         ],
         [
             InlineKeyboardButton(
-                "MT Reguler",
-                callback_data=f"{prefix}_mt_reguler"
+                "IB H+0",
+                callback_data=f"{prefix}_ib_h0"
             ),
             InlineKeyboardButton(
-                "MT Sameday",
-                callback_data=f"{prefix}_mt_sameday"
+                "MT REGULER",
+                callback_data=f"{prefix}_mt_reguler"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "MT H+0",
+                callback_data=f"{prefix}_mt_h0"
             ),
         ],
         [
@@ -433,7 +479,7 @@ def kategori_keyboard(
 
 
 # =========================================================
-# KEYBOARD STATUS
+# STATUS
 # =========================================================
 
 def status_keyboard(
@@ -443,19 +489,19 @@ def status_keyboard(
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "✅ Done",
+                "✅ DONE",
                 callback_data=f"{prefix}_done"
             )
         ],
         [
             InlineKeyboardButton(
-                "⏳ Pending",
+                "⏳ PENDING",
                 callback_data=f"{prefix}_pending"
             )
         ],
         [
             InlineKeyboardButton(
-                "❌ Cancel",
+                "❌ CANCEL",
                 callback_data=f"{prefix}_cancel"
             )
         ],
@@ -469,49 +515,19 @@ def status_keyboard(
 
 
 # =========================================================
-# TAMPILKAN MENU
+# FORMAT REPORT
 # =========================================================
 
-async def tampilkan_menu_callback(
-    query,
-    data
-):
-
-    await query.edit_message_text(
-        "📋 <b>REPORT PROGRESS</b>\n\n"
-        f"👥 Tim: <b>{escape(data['team_name'])}</b>\n\n"
-        "Silakan pilih menu:",
-        parse_mode="HTML",
-        reply_markup=inline_menu_keyboard()
-    )
-
-
-async def tampilkan_menu_message(
-    message,
-    data
-):
-
-    await message.reply_text(
-        "📋 <b>REPORT PROGRESS</b>\n\n"
-        f"👥 Tim: <b>{escape(data['team_name'])}</b>\n\n"
-        "Silakan pilih menu di bawah.",
-        parse_mode="HTML",
-        reply_markup=menu_keyboard()
-    )
-
-
-# =========================================================
-# BUAT REPORT
-# =========================================================
-
-def buat_report_text(
+def format_report(
     team_name,
     items
 ):
 
-    now = datetime.now(TIMEZONE)
+    now = datetime.now(
+        TIMEZONE
+    )
 
-    bulan = [
+    months = [
         "Januari",
         "Februari",
         "Maret",
@@ -526,94 +542,123 @@ def buat_report_text(
         "Desember"
     ]
 
-    tanggal = (
-        f"{now.day:02d} "
-        f"{bulan[now.month - 1]} "
-        f"{now.year}"
-    )
-
-    grouped = {}
+    grouped = {
+        key: []
+        for key in KATEGORI
+    }
 
     for item in items:
 
-        category = item["category"]
+        category = item.get(
+            "category"
+        )
 
-        if category not in grouped:
-            grouped[category] = []
+        if category in grouped:
+            grouped[category].append(
+                item
+            )
 
-        grouped[category].append(item)
+    lines = [
+        "<b>REPORT PROGRESS</b>",
+        "",
+        f"Tim: {escape(str(team_name))}",
+        (
+            f"Tanggal: "
+            f"{now.day:02d} "
+            f"{months[now.month - 1]} "
+            f"{now.year}"
+        ),
+        "",
+    ]
 
-    lines = []
+    for key, label in KATEGORI.items():
 
-    # =========================
-    # JUDUL
-    # =========================
-
-    lines.append("REPORT PROGRESS")
-    lines.append("")
-
-    lines.append(
-        f"Tim: {team_name}"
-    )
-
-    lines.append(
-        f"Tanggal: {tanggal}"
-    )
-
-    lines.append("")
-
-    # =========================
-    # KATEGORI
-    # =========================
-
-    for category in KATEGORI:
-
+        # KATEGORI BOLD
         lines.append(
-            KATEGORI[category]
+            f"<b>{label}</b>"
         )
 
-        category_items = grouped.get(
-            category,
-            []
-        )
+        category_items = grouped[key]
 
-        # Kalau kategori kosong
         if not category_items:
 
-            lines.append("-")
-            lines.append("")
+            lines.append("• -")
 
-            continue
+        else:
 
-        # Kalau kategori ada isinya
-        for index, item in enumerate(
-            category_items
-        ):
+            for item in category_items:
 
-            status_data = STATUS.get(
-                item["status"],
-                ("Unknown", "❔")
-            )
+                status_name, emoji = STATUS.get(
+                    item.get("status"),
+                    (
+                        str(
+                            item.get(
+                                "status",
+                                "UNKNOWN"
+                            )
+                        ).upper(),
+                        "❔"
+                    )
+                )
 
-            status_name = status_data[0]
-            emoji = status_data[1]
+                # ID + STATUS BOLD
+                lines.append(
+                    f"• "
+                    f"{escape(str(item.get('number', '')))} "
+                    f"(<b>{status_name}</b>) "
+                    f"{emoji}"
+                )
 
-            lines.append(
-                f"•{item['number']} "
-                f"({status_name}){emoji}"
-            )
-
-            # Spasi antar nomor
-            if index < len(category_items) - 1:
+                # BARIS KOSONG SETELAH SETIAP ID
                 lines.append("")
 
-        # Spasi sebelum kategori berikutnya
+        # BARIS KOSONG ANTAR KATEGORI
         lines.append("")
 
-    return "\n".join(lines).strip()
+    return "\n".join(
+        lines
+    ).rstrip()
 
 
-async def kirim_report_message(
+# =========================================================
+# TAMPILKAN MENU
+# =========================================================
+
+async def show_menu_message(
+    message,
+    data
+):
+
+    await message.reply_text(
+        "📋 <b>REPORT PROGRESS</b>\n\n"
+        f"👥 Tim: "
+        f"<b>{escape(str(data['team_name']))}</b>\n\n"
+        "Silakan pilih menu di bawah.",
+        parse_mode="HTML",
+        reply_markup=menu_keyboard()
+    )
+
+
+async def show_menu_callback(
+    query,
+    data
+):
+
+    await query.edit_message_text(
+        "📋 <b>REPORT PROGRESS</b>\n\n"
+        f"👥 Tim: "
+        f"<b>{escape(str(data['team_name']))}</b>\n\n"
+        "Silakan pilih menu:",
+        parse_mode="HTML",
+        reply_markup=inline_menu_keyboard()
+    )
+
+
+# =========================================================
+# KIRIM REPORT
+# =========================================================
+
+async def send_report_message(
     message,
     user_id,
     team_name
@@ -623,17 +668,18 @@ async def kirim_report_message(
         user_id
     )
 
-    report = buat_report_text(
+    report = format_report(
         team_name,
         items
     )
 
     await message.reply_text(
-        report
+        report,
+        parse_mode="HTML"
     )
 
 
-async def kirim_report_callback(
+async def send_report_callback(
     query,
     user_id,
     team_name
@@ -643,13 +689,13 @@ async def kirim_report_callback(
         user_id
     )
 
-    report = buat_report_text(
+    report = format_report(
         team_name,
         items
     )
 
     await query.edit_message_text(
-        escape(report),
+        report,
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [
@@ -659,6 +705,54 @@ async def kirim_report_callback(
                 )
             ]
         ])
+    )
+
+
+# =========================================================
+# TUTORIAL
+# =========================================================
+
+async def tutor(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    text = (
+        "<b>📚 TUTORIAL REPORT PROGRESS BOT</b>\n\n"
+
+        "<b>1. Atur nama tim</b>\n"
+        "Ketik /nama lalu masukkan nama tim.\n\n"
+
+        "<b>2. Tambah data</b>\n"
+        "Pilih ➕ Tambah Data.\n"
+        "Masukkan nomor, pilih kategori, "
+        "kemudian pilih status.\n\n"
+
+        "<b>3. Buat report</b>\n"
+        "Ketik /report atau pilih "
+        "📄 Buat Report.\n\n"
+
+        "<b>4. Pergantian hari otomatis</b>\n"
+        "Pada pukul <b>00.00 WIB</b>, "
+        "report otomatis menggunakan tanggal baru.\n"
+        "Report hari baru otomatis kosong.\n"
+        "Tidak perlu menggunakan /reset.\n\n"
+
+        "<b>5. Data hari sebelumnya</b>\n"
+        "Data lama tetap tersimpan di Supabase "
+        "dan tidak ikut muncul pada report hari baru.\n\n"
+
+        "<b>6. Reset manual</b>\n"
+        "/reset hanya menghapus data "
+        "report hari berjalan.\n\n"
+
+        "<b>7. Zona waktu</b>\n"
+        "Asia/Jakarta (WIB)"
+    )
+
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML"
     )
 
 
@@ -678,19 +772,19 @@ async def start(
     if not user:
         return
 
-    data = get_user(user)
+    data = get_user(
+        user
+    )
 
     first_name = (
         user.first_name
         or "Teman"
     )
 
-    # =====================================================
     # SALAM PEMBUKA
-    # =====================================================
-
     await update.message.reply_text(
-        f"👋 <b>Halo, {escape(first_name)}!</b>\n\n"
+        f"👋 <b>Halo, "
+        f"{escape(first_name)}!</b>\n\n"
         "Selamat datang di "
         "<b>Report Progress Bot</b> 📋\n\n"
         "Bot ini membantu kamu mencatat "
@@ -700,10 +794,7 @@ async def start(
         parse_mode="HTML"
     )
 
-    # =====================================================
     # USER BARU
-    # =====================================================
-
     if (
         not data.get("team_name")
         or data["team_name"]
@@ -726,13 +817,10 @@ async def start(
 
         return
 
-    # =====================================================
     # USER LAMA
-    # =====================================================
-
     await update.message.reply_text(
         f"👥 Tim: "
-        f"<b>{escape(data['team_name'])}</b>\n\n"
+        f"<b>{escape(str(data['team_name']))}</b>\n\n"
         "Kamu sudah siap membuat report. 🚀\n\n"
         "Silakan pilih menu di bawah:",
         parse_mode="HTML",
@@ -756,9 +844,11 @@ async def menu(
 
     context.user_data.clear()
 
-    data = get_user(user)
+    data = get_user(
+        user
+    )
 
-    await tampilkan_menu_message(
+    await show_menu_message(
         update.message,
         data
     )
@@ -780,9 +870,11 @@ async def command_report(
 
     context.user_data.clear()
 
-    data = get_user(user)
+    data = get_user(
+        user
+    )
 
-    await kirim_report_message(
+    await send_report_message(
         update.message,
         user.id,
         data["team_name"]
@@ -811,7 +903,7 @@ async def command_nama(
     await update.message.reply_text(
         "👤 <b>UBAH NAMA TIM</b>\n\n"
         f"Nama sekarang:\n"
-        f"<b>{escape(data['team_name'])}</b>\n\n"
+        f"<b>{escape(str(data['team_name']))}</b>\n\n"
         "Silakan kirim nama tim baru.\n\n"
         "Contoh:\n"
         "<code>Bagas-Toni</code>",
@@ -833,6 +925,7 @@ async def command_reset(
     if not user:
         return
 
+    # HANYA DATA HARI INI
     delete_all_report_items(
         user.id
     )
@@ -840,15 +933,179 @@ async def command_reset(
     context.user_data.clear()
 
     await update.message.reply_text(
-        "🗑️ <b>SEMUA DATA BERHASIL DIHAPUS</b>\n\n"
-        "Data report milik kamu sudah dibersihkan.",
+        "🗑️ <b>REPORT HARI INI BERHASIL DIHAPUS</b>\n\n"
+        "Data hari sebelumnya tetap tersimpan.",
         parse_mode="HTML",
         reply_markup=menu_keyboard()
     )
 
 
 # =========================================================
-# PESAN TEKS
+# DAFTAR DATA EDIT / HAPUS
+# =========================================================
+
+async def show_item_list(
+    message,
+    context,
+    user_id,
+    edit=True
+):
+
+    context.user_data.clear()
+
+    items = get_report_items(
+        user_id
+    )
+
+    if edit:
+
+        action = "edititem"
+        title = "✏️ <b>EDIT DATA</b>"
+
+    else:
+
+        action = "deleteitem"
+        title = "🗑️ <b>HAPUS DATA</b>"
+
+    if not items:
+
+        await message.reply_text(
+            f"{title}\n\n"
+            "Belum ada data.",
+            parse_mode="HTML",
+            reply_markup=menu_keyboard()
+        )
+
+        return
+
+    keyboard = []
+
+    for item in items:
+
+        category = KATEGORI.get(
+            item.get("category"),
+            item.get("category", "")
+        )
+
+        status = STATUS.get(
+            item.get("status"),
+            ("Unknown", "❔")
+        )[1]
+
+        label = (
+            f"{item.get('number')} • "
+            f"{category} • "
+            f"{status}"
+        )
+
+        keyboard.append([
+            InlineKeyboardButton(
+                label,
+                callback_data=(
+                    f"{action}_{item.get('id')}"
+                )
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "⬅️ Kembali",
+            callback_data="cb_menu"
+        )
+    ])
+
+    await message.reply_text(
+        f"{title}\n\n"
+        "Pilih data:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
+
+
+async def show_item_list_callback(
+    query,
+    context,
+    user_id,
+    edit=True
+):
+
+    context.user_data.clear()
+
+    items = get_report_items(
+        user_id
+    )
+
+    if edit:
+
+        action = "edititem"
+        title = "✏️ <b>EDIT DATA</b>"
+
+    else:
+
+        action = "deleteitem"
+        title = "🗑️ <b>HAPUS DATA</b>"
+
+    if not items:
+
+        await query.edit_message_text(
+            f"{title}\n\n"
+            "Belum ada data.",
+            parse_mode="HTML",
+            reply_markup=inline_menu_keyboard()
+        )
+
+        return
+
+    keyboard = []
+
+    for item in items:
+
+        category = KATEGORI.get(
+            item.get("category"),
+            item.get("category", "")
+        )
+
+        status = STATUS.get(
+            item.get("status"),
+            ("Unknown", "❔")
+        )[1]
+
+        label = (
+            f"{item.get('number')} • "
+            f"{category} • "
+            f"{status}"
+        )
+
+        keyboard.append([
+            InlineKeyboardButton(
+                label,
+                callback_data=(
+                    f"{action}_{item.get('id')}"
+                )
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            "⬅️ Kembali",
+            callback_data="cb_menu"
+        )
+    ])
+
+    await query.edit_message_text(
+        f"{title}\n\n"
+        "Pilih data:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
+
+
+# =========================================================
+# PESAN TEXT
 # =========================================================
 
 async def pesan(
@@ -865,10 +1122,24 @@ async def pesan(
         return
 
     text = (
-        update.message.text or ""
+        update.message.text
+        or ""
     ).strip()
 
     user_id = user.id
+
+    # =====================================================
+    # TUTORIAL
+    # =====================================================
+
+    if text == "📚 Tutorial":
+
+        await tutor(
+            update,
+            context
+        )
+
+        return
 
     # =====================================================
     # NAMA TIM
@@ -881,8 +1152,7 @@ async def pesan(
         if len(text) < 2:
 
             await update.message.reply_text(
-                "⚠️ Nama tim terlalu pendek.\n\n"
-                "Silakan masukkan nama tim lagi."
+                "⚠️ Nama tim terlalu pendek."
             )
 
             return
@@ -904,8 +1174,7 @@ async def pesan(
 
         await update.message.reply_text(
             "✅ <b>NAMA TIM BERHASIL DISIMPAN</b>\n\n"
-            f"👥 Tim: <b>{escape(text)}</b>\n\n"
-            "Sekarang kamu bisa mulai membuat report.",
+            f"👥 Tim: <b>{escape(text)}</b>",
             parse_mode="HTML",
             reply_markup=menu_keyboard()
         )
@@ -920,22 +1189,14 @@ async def pesan(
         "waiting_number"
     ):
 
-        if not text.isdigit():
+        if (
+            not text.isdigit()
+            or not 4 <= len(text) <= 20
+        ):
 
             await update.message.reply_text(
-                "⚠️ Nomor harus berupa angka saja.\n\n"
-                "Contoh:\n"
-                "<code>1234567</code>",
-                parse_mode="HTML"
-            )
-
-            return
-
-        if len(text) < 4 or len(text) > 20:
-
-            await update.message.reply_text(
-                "⚠️ Nomor harus 4–20 digit.\n\n"
-                "Silakan kirim nomor yang benar."
+                "⚠️ Nomor harus berupa "
+                "4–20 digit angka."
             )
 
             return
@@ -948,36 +1209,10 @@ async def pesan(
             "waiting_number"
         ] = False
 
-        category = context.user_data.get(
-            "category"
-        )
-
-        # Jika kategori belum dipilih,
-        # tampilkan pilihan kategori.
-        if not category:
-
-            await update.message.reply_text(
-                "📂 <b>PILIH KATEGORI</b>\n\n"
-                f"🔢 Nomor: "
-                f"<code>{escape(text)}</code>\n\n"
-                "Pilih kategori:",
-                parse_mode="HTML",
-                reply_markup=kategori_keyboard()
-            )
-
-            return
-
         await update.message.reply_text(
-            "📊 <b>PILIH STATUS</b>\n\n"
-            f"🔢 Nomor: "
-            f"<code>{escape(text)}</code>\n"
-            f"📂 Kategori: "
-            f"<b>{escape(KATEGORI[category])}</b>\n\n"
-            "Pilih status:",
+            "📂 <b>PILIH KATEGORI</b>",
             parse_mode="HTML",
-            reply_markup=status_keyboard(
-                prefix="addstatus"
-            )
+            reply_markup=kategori_keyboard()
         )
 
         return
@@ -990,21 +1225,14 @@ async def pesan(
         "waiting_edit_number"
     ):
 
-        if not text.isdigit():
+        if (
+            not text.isdigit()
+            or not 4 <= len(text) <= 20
+        ):
 
             await update.message.reply_text(
-                "⚠️ Nomor harus berupa angka saja.\n\n"
-                "Contoh:\n"
-                "<code>1234567</code>",
-                parse_mode="HTML"
-            )
-
-            return
-
-        if len(text) < 4 or len(text) > 20:
-
-            await update.message.reply_text(
-                "⚠️ Nomor harus 4–20 digit."
+                "⚠️ Nomor harus berupa "
+                "4–20 digit angka."
             )
 
             return
@@ -1013,23 +1241,13 @@ async def pesan(
             "edit_item_id"
         )
 
-        if not item_id:
-
-            context.user_data.clear()
-
-            await update.message.reply_text(
-                "⚠️ Data edit tidak ditemukan.",
-                reply_markup=menu_keyboard()
+        if (
+            not item_id
+            or not get_report_item(
+                user_id,
+                item_id
             )
-
-            return
-
-        item = get_report_item(
-            user_id,
-            item_id
-        )
-
-        if not item:
+        ):
 
             context.user_data.clear()
 
@@ -1049,8 +1267,7 @@ async def pesan(
         context.user_data.clear()
 
         await update.message.reply_text(
-            "✅ <b>NOMOR BERHASIL DIUBAH</b>\n\n"
-            f"Nomor baru: <code>{escape(text)}</code>",
+            "✅ <b>NOMOR BERHASIL DIUBAH</b>",
             parse_mode="HTML",
             reply_markup=menu_keyboard()
         )
@@ -1058,7 +1275,7 @@ async def pesan(
         return
 
     # =====================================================
-    # TOMBOL TAMBAH DATA
+    # TAMBAH DATA
     # =====================================================
 
     if text == "➕ Tambah Data":
@@ -1071,8 +1288,7 @@ async def pesan(
 
         await update.message.reply_text(
             "➕ <b>TAMBAH DATA</b>\n\n"
-            "Silakan kirim nomor terlebih dahulu.\n\n"
-            "Contoh:\n"
+            "Kirim nomor:\n"
             "<code>1234567</code>",
             parse_mode="HTML"
         )
@@ -1080,16 +1296,18 @@ async def pesan(
         return
 
     # =====================================================
-    # TOMBOL REPORT
+    # REPORT
     # =====================================================
 
     if text == "📄 Buat Report":
 
         context.user_data.clear()
 
-        data = get_user(user)
+        data = get_user(
+            user
+        )
 
-        await kirim_report_message(
+        await send_report_message(
             update.message,
             user_id,
             data["team_name"]
@@ -1098,153 +1316,37 @@ async def pesan(
         return
 
     # =====================================================
-    # TOMBOL EDIT
+    # EDIT
     # =====================================================
 
     if text == "✏️ Edit Data":
 
-        context.user_data.clear()
-
-        items = get_report_items(
-            user_id
-        )
-
-        if not items:
-
-            await update.message.reply_text(
-                "✏️ <b>EDIT DATA</b>\n\n"
-                "Belum ada data yang bisa diedit.",
-                parse_mode="HTML",
-                reply_markup=menu_keyboard()
-            )
-
-            return
-
-        keyboard = []
-
-        for item in items:
-
-            category_name = KATEGORI.get(
-                item["category"],
-                item["category"]
-            )
-
-            status_data = STATUS.get(
-                item["status"],
-                ("Unknown", "❔")
-            )
-
-            label = (
-                f"{item['number']} • "
-                f"{category_name} • "
-                f"{status_data[1]}"
-            )
-
-            if len(label) > 55:
-                label = label[:52] + "..."
-
-            keyboard.append([
-                InlineKeyboardButton(
-                    label,
-                    callback_data=(
-                        f"edititem_{item['id']}"
-                    )
-                )
-            ])
-
-        keyboard.append([
-            InlineKeyboardButton(
-                "⬅️ Kembali",
-                callback_data="cb_menu"
-            )
-        ])
-
-        await update.message.reply_text(
-            "✏️ <b>EDIT DATA</b>\n\n"
-            "Pilih data yang ingin diedit:",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                keyboard
-            )
+        await show_item_list(
+            update.message,
+            context,
+            user_id,
+            edit=True
         )
 
         return
 
     # =====================================================
-    # TOMBOL HAPUS
+    # HAPUS
     # =====================================================
 
     if text == "🗑️ Hapus Data":
 
-        context.user_data.clear()
-
-        items = get_report_items(
-            user_id
-        )
-
-        if not items:
-
-            await update.message.reply_text(
-                "🗑️ <b>HAPUS DATA</b>\n\n"
-                "Belum ada data yang bisa dihapus.",
-                parse_mode="HTML",
-                reply_markup=menu_keyboard()
-            )
-
-            return
-
-        keyboard = []
-
-        for item in items:
-
-            category_name = KATEGORI.get(
-                item["category"],
-                item["category"]
-            )
-
-            status_data = STATUS.get(
-                item["status"],
-                ("Unknown", "❔")
-            )
-
-            label = (
-                f"{item['number']} • "
-                f"{category_name} • "
-                f"{status_data[1]}"
-            )
-
-            if len(label) > 55:
-                label = label[:52] + "..."
-
-            keyboard.append([
-                InlineKeyboardButton(
-                    label,
-                    callback_data=(
-                        f"deleteitem_{item['id']}"
-                    )
-                )
-            ])
-
-        keyboard.append([
-            InlineKeyboardButton(
-                "⬅️ Kembali",
-                callback_data="cb_menu"
-            )
-        ])
-
-        await update.message.reply_text(
-            "🗑️ <b>HAPUS DATA</b>\n\n"
-            "Pilih data yang ingin dihapus:",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                keyboard
-            )
+        await show_item_list(
+            update.message,
+            context,
+            user_id,
+            edit=False
         )
 
         return
 
     # =====================================================
-    # TOMBOL NAMA TIM
+    # NAMA
     # =====================================================
 
     if text == "👤 Ubah Nama Tim":
@@ -1277,33 +1379,65 @@ async def tombol(
 
     query = update.callback_query
 
-    try:
-        await query.answer()
-    except Exception:
-        pass
+    if not query:
+        return
 
     user = update.effective_user
 
     if not user:
         return
 
+    await query.answer()
+
     user_id = user.id
 
-    pilihan = query.data or ""
+    data = get_user(
+        user
+    )
 
-    data = get_user(user)
+    pilihan = (
+        query.data
+        or ""
+    )
 
     # =====================================================
-    # MENU
+    # KEMBALI MENU
     # =====================================================
 
     if pilihan == "cb_menu":
 
         context.user_data.clear()
 
-        await tampilkan_menu_callback(
+        await show_menu_callback(
             query,
             data
+        )
+
+        return
+
+    # =====================================================
+    # TUTOR
+    # =====================================================
+
+    if pilihan == "cb_tutor":
+
+        await query.edit_message_text(
+            "<b>📚 TUTORIAL</b>\n\n"
+            "➕ Tambah Data untuk menambahkan report.\n\n"
+            "📄 Buat Report untuk melihat report.\n\n"
+            "Setiap <b>00.00 WIB</b>, "
+            "report otomatis berganti tanggal "
+            "dan mulai kosong.\n\n"
+            "/reset hanya menghapus report hari ini.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "⬅️ Kembali",
+                        callback_data="cb_menu"
+                    )
+                ]
+            ])
         )
 
         return
@@ -1322,133 +1456,9 @@ async def tombol(
 
         await query.edit_message_text(
             "➕ <b>TAMBAH DATA</b>\n\n"
-            "Silakan kirim nomor terlebih dahulu.\n\n"
-            "Contoh:\n"
+            "Kirim nomor:\n"
             "<code>1234567</code>",
             parse_mode="HTML"
-        )
-
-        return
-
-    # =====================================================
-    # KATEGORI TAMBAH
-    # =====================================================
-
-    if pilihan.startswith("addcat_"):
-
-        category = pilihan[
-            len("addcat_"):
-        ]
-
-        if category not in KATEGORI:
-
-            await query.edit_message_text(
-                "⚠️ Kategori tidak valid.",
-                reply_markup=inline_menu_keyboard()
-            )
-
-            return
-
-        context.user_data[
-            "category"
-        ] = category
-
-        number = context.user_data.get(
-            "number"
-        )
-
-        if number:
-
-            await query.edit_message_text(
-                "📊 <b>PILIH STATUS</b>\n\n"
-                f"🔢 Nomor: "
-                f"<code>{escape(number)}</code>\n"
-                f"📂 Kategori: "
-                f"<b>{escape(KATEGORI[category])}</b>\n\n"
-                "Pilih status:",
-                parse_mode="HTML",
-                reply_markup=status_keyboard(
-                    prefix="addstatus"
-                )
-            )
-
-            return
-
-        context.user_data[
-            "waiting_number"
-        ] = True
-
-        await query.edit_message_text(
-            "➕ <b>TAMBAH DATA</b>\n\n"
-            f"📂 Kategori: "
-            f"<b>{escape(KATEGORI[category])}</b>\n\n"
-            "Silakan kirim nomor.",
-            parse_mode="HTML"
-        )
-
-        return
-
-    # =====================================================
-    # STATUS TAMBAH
-    # =====================================================
-
-    if pilihan.startswith("addstatus_"):
-
-        status = pilihan[
-            len("addstatus_"):
-        ]
-
-        if status not in STATUS:
-
-            await query.edit_message_text(
-                "⚠️ Status tidak valid.",
-                reply_markup=inline_menu_keyboard()
-            )
-
-            return
-
-        category = context.user_data.get(
-            "category"
-        )
-
-        number = context.user_data.get(
-            "number"
-        )
-
-        if not category or not number:
-
-            await query.edit_message_text(
-                "⚠️ Data sementara tidak ditemukan.\n\n"
-                "Silakan mulai lagi.",
-                reply_markup=inline_menu_keyboard()
-            )
-
-            return
-
-        add_report_item(
-            user_id,
-            number,
-            category,
-            status
-        )
-
-        status_name, emoji = STATUS[
-            status
-        ]
-
-        context.user_data.clear()
-
-        await query.edit_message_text(
-            "✅ <b>DATA BERHASIL DITAMBAHKAN</b>\n\n"
-            f"🔢 Nomor: "
-            f"<code>{escape(number)}</code>\n"
-            f"📂 Kategori: "
-            f"<b>{escape(KATEGORI[category])}</b>\n"
-            f"📊 Status: "
-            f"<b>{escape(status_name)}</b> {emoji}\n\n"
-            "Data sudah tersimpan.",
-            parse_mode="HTML",
-            reply_markup=inline_menu_keyboard()
         )
 
         return
@@ -1461,7 +1471,7 @@ async def tombol(
 
         context.user_data.clear()
 
-        await kirim_report_callback(
+        await send_report_callback(
             query,
             user_id,
             data["team_name"]
@@ -1483,9 +1493,7 @@ async def tombol(
 
         await query.edit_message_text(
             "👤 <b>UBAH NAMA TIM</b>\n\n"
-            f"Nama sekarang:\n"
-            f"<b>{escape(data['team_name'])}</b>\n\n"
-            "Silakan kirim nama tim baru.",
+            "Kirim nama tim baru:",
             parse_mode="HTML"
         )
 
@@ -1497,67 +1505,112 @@ async def tombol(
 
     if pilihan == "cb_editlist":
 
-        items = get_report_items(
-            user_id
+        await show_item_list_callback(
+            query,
+            context,
+            user_id,
+            edit=True
         )
 
-        if not items:
+        return
+
+    # =====================================================
+    # DAFTAR HAPUS
+    # =====================================================
+
+    if pilihan == "cb_deletelist":
+
+        await show_item_list_callback(
+            query,
+            context,
+            user_id,
+            edit=False
+        )
+
+        return
+
+    # =====================================================
+    # PILIH KATEGORI TAMBAH
+    # =====================================================
+
+    if pilihan.startswith(
+        "addcat_"
+    ):
+
+        category = pilihan[
+            len("addcat_"):
+        ]
+
+        if category not in KATEGORI:
+            return
+
+        context.user_data[
+            "category"
+        ] = category
+
+        await query.edit_message_text(
+            "📊 <b>PILIH STATUS</b>",
+            parse_mode="HTML",
+            reply_markup=status_keyboard()
+        )
+
+        return
+
+    # =====================================================
+    # PILIH STATUS TAMBAH
+    # =====================================================
+
+    if pilihan.startswith(
+        "addstatus_"
+    ):
+
+        status = pilihan[
+            len("addstatus_"):
+        ]
+
+        number = context.user_data.get(
+            "number"
+        )
+
+        category = context.user_data.get(
+            "category"
+        )
+
+        if (
+            status not in STATUS
+            or not number
+            or category not in KATEGORI
+        ):
+
+            context.user_data.clear()
 
             await query.edit_message_text(
-                "✏️ <b>EDIT DATA</b>\n\n"
-                "Belum ada data yang bisa diedit.",
-                parse_mode="HTML",
+                "⚠️ Data belum lengkap.",
                 reply_markup=inline_menu_keyboard()
             )
 
             return
 
-        keyboard = []
+        add_report_item(
+            user_id,
+            number,
+            category,
+            status
+        )
 
-        for item in items:
+        status_name, emoji = STATUS[
+            status
+        ]
 
-            category_name = KATEGORI.get(
-                item["category"],
-                item["category"]
-            )
-
-            status_data = STATUS.get(
-                item["status"],
-                ("Unknown", "❔")
-            )
-
-            label = (
-                f"{item['number']} • "
-                f"{category_name} • "
-                f"{status_data[1]}"
-            )
-
-            if len(label) > 55:
-                label = label[:52] + "..."
-
-            keyboard.append([
-                InlineKeyboardButton(
-                    label,
-                    callback_data=(
-                        f"edititem_{item['id']}"
-                    )
-                )
-            ])
-
-        keyboard.append([
-            InlineKeyboardButton(
-                "⬅️ Kembali",
-                callback_data="cb_menu"
-            )
-        ])
+        context.user_data.clear()
 
         await query.edit_message_text(
-            "✏️ <b>EDIT DATA</b>\n\n"
-            "Pilih data yang ingin diedit:",
+            "✅ <b>DATA BERHASIL DITAMBAHKAN</b>\n\n"
+            f"🔢 <code>{escape(number)}</code>\n"
+            f"📂 <b>{KATEGORI[category]}</b>\n"
+            f"📊 <b>{status_name}</b> {emoji}",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                keyboard
-            )
+            reply_markup=inline_menu_keyboard()
         )
 
         return
@@ -1566,18 +1619,18 @@ async def tombol(
     # PILIH DATA EDIT
     # =====================================================
 
-    if pilihan.startswith("edititem_"):
+    if pilihan.startswith(
+        "edititem_"
+    ):
 
-        item_id_text = pilihan[
-            len("edititem_"):
-        ]
-
-        if not item_id_text.isdigit():
+        try:
+            item_id = int(
+                pilihan[
+                    len("edititem_"):
+                ]
+            )
+        except ValueError:
             return
-
-        item_id = int(
-            item_id_text
-        )
 
         item = get_report_item(
             user_id,
@@ -1597,44 +1650,26 @@ async def tombol(
             "edit_item_id"
         ] = item_id
 
-        category_name = KATEGORI.get(
-            item["category"],
-            item["category"]
-        )
-
-        status_data = STATUS.get(
-            item["status"],
-            ("Unknown", "❔")
-        )
-
         await query.edit_message_text(
-            "✏️ <b>EDIT DATA</b>\n\n"
-            f"🔢 Nomor: "
-            f"<code>{escape(str(item['number']))}</code>\n"
-            f"📂 Kategori: "
-            f"<b>{escape(category_name)}</b>\n"
-            f"📊 Status: "
-            f"<b>{escape(status_data[0])}</b> "
-            f"{status_data[1]}\n\n"
-            "Apa yang ingin diubah?",
+            "✏️ <b>PILIH YANG INGIN DIUBAH</b>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton(
                         "🔢 Nomor",
-                        callback_data="editnum"
+                        callback_data="edit_number"
                     )
                 ],
                 [
                     InlineKeyboardButton(
                         "📂 Kategori",
-                        callback_data="editcategory"
+                        callback_data="edit_category"
                     )
                 ],
                 [
                     InlineKeyboardButton(
                         "📊 Status",
-                        callback_data="editstatus"
+                        callback_data="edit_status"
                     )
                 ],
                 [
@@ -1652,20 +1687,7 @@ async def tombol(
     # EDIT NOMOR
     # =====================================================
 
-    if pilihan == "editnum":
-
-        item_id = context.user_data.get(
-            "edit_item_id"
-        )
-
-        if not item_id:
-
-            await query.edit_message_text(
-                "⚠️ Data edit tidak ditemukan.",
-                reply_markup=inline_menu_keyboard()
-            )
-
-            return
+    if pilihan == "edit_number":
 
         context.user_data[
             "waiting_edit_number"
@@ -1673,9 +1695,7 @@ async def tombol(
 
         await query.edit_message_text(
             "🔢 <b>UBAH NOMOR</b>\n\n"
-            "Silakan kirim nomor baru.\n\n"
-            "Contoh:\n"
-            "<code>1234567</code>",
+            "Kirim nomor baru:",
             parse_mode="HTML"
         )
 
@@ -1685,21 +1705,13 @@ async def tombol(
     # EDIT KATEGORI
     # =====================================================
 
-    if pilihan == "editcategory":
-
-        item_id = context.user_data.get(
-            "edit_item_id"
-        )
-
-        if not item_id:
-            return
+    if pilihan == "edit_category":
 
         await query.edit_message_text(
-            "📂 <b>UBAH KATEGORI</b>\n\n"
-            "Pilih kategori baru:",
+            "📂 <b>UBAH KATEGORI</b>",
             parse_mode="HTML",
             reply_markup=kategori_keyboard(
-                prefix="editcat"
+                "editcat"
             )
         )
 
@@ -1709,7 +1721,9 @@ async def tombol(
     # PILIH KATEGORI EDIT
     # =====================================================
 
-    if pilihan.startswith("editcat_"):
+    if pilihan.startswith(
+        "editcat_"
+    ):
 
         item_id = context.user_data.get(
             "edit_item_id"
@@ -1719,18 +1733,16 @@ async def tombol(
             len("editcat_"):
         ]
 
-        if not item_id:
+        if (
+            not item_id
+            or category not in KATEGORI
+        ):
             return
 
-        if category not in KATEGORI:
-            return
-
-        item = get_report_item(
+        if not get_report_item(
             user_id,
             item_id
-        )
-
-        if not item:
+        ):
             return
 
         update_report_category(
@@ -1742,11 +1754,7 @@ async def tombol(
         context.user_data.clear()
 
         await query.edit_message_text(
-            "✅ <b>KATEGORI BERHASIL DIUBAH</b>\n\n"
-            f"🔢 Nomor: "
-            f"<code>{escape(str(item['number']))}</code>\n"
-            f"📂 Kategori baru: "
-            f"<b>{escape(KATEGORI[category])}</b>",
+            "✅ <b>KATEGORI BERHASIL DIUBAH</b>",
             parse_mode="HTML",
             reply_markup=inline_menu_keyboard()
         )
@@ -1757,21 +1765,13 @@ async def tombol(
     # EDIT STATUS
     # =====================================================
 
-    if pilihan == "editstatus":
-
-        item_id = context.user_data.get(
-            "edit_item_id"
-        )
-
-        if not item_id:
-            return
+    if pilihan == "edit_status":
 
         await query.edit_message_text(
-            "📊 <b>UBAH STATUS</b>\n\n"
-            "Pilih status baru:",
+            "📊 <b>UBAH STATUS</b>",
             parse_mode="HTML",
             reply_markup=status_keyboard(
-                prefix="editstat"
+                "editstat"
             )
         )
 
@@ -1781,7 +1781,9 @@ async def tombol(
     # PILIH STATUS EDIT
     # =====================================================
 
-    if pilihan.startswith("editstat_"):
+    if pilihan.startswith(
+        "editstat_"
+    ):
 
         item_id = context.user_data.get(
             "edit_item_id"
@@ -1791,18 +1793,16 @@ async def tombol(
             len("editstat_"):
         ]
 
-        if not item_id:
+        if (
+            not item_id
+            or status not in STATUS
+        ):
             return
 
-        if status not in STATUS:
-            return
-
-        item = get_report_item(
+        if not get_report_item(
             user_id,
             item_id
-        )
-
-        if not item:
+        ):
             return
 
         update_report_status(
@@ -1819,85 +1819,10 @@ async def tombol(
 
         await query.edit_message_text(
             "✅ <b>STATUS BERHASIL DIUBAH</b>\n\n"
-            f"🔢 Nomor: "
-            f"<code>{escape(str(item['number']))}</code>\n"
-            f"📊 Status baru: "
-            f"<b>{escape(status_name)}</b> {emoji}",
+            f"Status baru: "
+            f"<b>{status_name}</b> {emoji}",
             parse_mode="HTML",
             reply_markup=inline_menu_keyboard()
-        )
-
-        return
-
-    # =====================================================
-    # DAFTAR HAPUS
-    # =====================================================
-
-    if pilihan == "cb_deletelist":
-
-        context.user_data.clear()
-
-        items = get_report_items(
-            user_id
-        )
-
-        if not items:
-
-            await query.edit_message_text(
-                "🗑️ <b>HAPUS DATA</b>\n\n"
-                "Belum ada data yang bisa dihapus.",
-                parse_mode="HTML",
-                reply_markup=inline_menu_keyboard()
-            )
-
-            return
-
-        keyboard = []
-
-        for item in items:
-
-            category_name = KATEGORI.get(
-                item["category"],
-                item["category"]
-            )
-
-            status_data = STATUS.get(
-                item["status"],
-                ("Unknown", "❔")
-            )
-
-            label = (
-                f"{item['number']} • "
-                f"{category_name} • "
-                f"{status_data[1]}"
-            )
-
-            if len(label) > 55:
-                label = label[:52] + "..."
-
-            keyboard.append([
-                InlineKeyboardButton(
-                    label,
-                    callback_data=(
-                        f"deleteitem_{item['id']}"
-                    )
-                )
-            ])
-
-        keyboard.append([
-            InlineKeyboardButton(
-                "⬅️ Kembali",
-                callback_data="cb_menu"
-            )
-        ])
-
-        await query.edit_message_text(
-            "🗑️ <b>HAPUS DATA</b>\n\n"
-            "Pilih data yang ingin dihapus:",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                keyboard
-            )
         )
 
         return
@@ -1906,18 +1831,18 @@ async def tombol(
     # PILIH DATA HAPUS
     # =====================================================
 
-    if pilihan.startswith("deleteitem_"):
+    if pilihan.startswith(
+        "deleteitem_"
+    ):
 
-        item_id_text = pilihan[
-            len("deleteitem_"):
-        ]
-
-        if not item_id_text.isdigit():
+        try:
+            item_id = int(
+                pilihan[
+                    len("deleteitem_"):
+                ]
+            )
+        except ValueError:
             return
-
-        item_id = int(
-            item_id_text
-        )
 
         item = get_report_item(
             user_id,
@@ -1934,18 +1859,17 @@ async def tombol(
             return
 
         category_name = KATEGORI.get(
-            item["category"],
-            item["category"]
+            item.get("category"),
+            item.get("category", "")
         )
 
         await query.edit_message_text(
             "⚠️ <b>KONFIRMASI HAPUS</b>\n\n"
-            "Apakah kamu yakin ingin menghapus:\n\n"
-            f"🔢 Nomor: "
+            f"Nomor: "
             f"<code>{escape(str(item['number']))}</code>\n"
-            f"📂 Kategori: "
+            f"Kategori: "
             f"<b>{escape(category_name)}</b>\n\n"
-            "Data yang dihapus tidak dapat dikembalikan.",
+            "Apakah kamu yakin ingin menghapus data ini?",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
                 [
@@ -1971,18 +1895,18 @@ async def tombol(
     # KONFIRMASI HAPUS
     # =====================================================
 
-    if pilihan.startswith("confirmdelete_"):
+    if pilihan.startswith(
+        "confirmdelete_"
+    ):
 
-        item_id_text = pilihan[
-            len("confirmdelete_"):
-        ]
-
-        if not item_id_text.isdigit():
+        try:
+            item_id = int(
+                pilihan[
+                    len("confirmdelete_"):
+                ]
+            )
+        except ValueError:
             return
-
-        item_id = int(
-            item_id_text
-        )
 
         item = get_report_item(
             user_id,
@@ -1992,7 +1916,7 @@ async def tombol(
         if not item:
 
             await query.edit_message_text(
-                "⚠️ Data sudah tidak ditemukan.",
+                "⚠️ Data tidak ditemukan.",
                 reply_markup=inline_menu_keyboard()
             )
 
@@ -2006,29 +1930,12 @@ async def tombol(
         context.user_data.clear()
 
         await query.edit_message_text(
-            "✅ <b>DATA BERHASIL DIHAPUS</b>\n\n"
-            f"Nomor <code>{escape(str(item['number']))}</code> "
-            "telah dihapus.",
+            "✅ <b>DATA BERHASIL DIHAPUS</b>",
             parse_mode="HTML",
             reply_markup=inline_menu_keyboard()
         )
 
         return
-
-    # =====================================================
-    # CALLBACK TIDAK DIKENAL
-    # =====================================================
-
-    print(
-        f"Callback tidak dikenal: {pilihan}",
-        flush=True
-    )
-
-    await query.edit_message_text(
-        "⚠️ Tombol sudah tidak berlaku.\n\n"
-        "Silakan kembali ke menu.",
-        reply_markup=inline_menu_keyboard()
-    )
 
 
 # =========================================================
@@ -2073,7 +1980,7 @@ def main():
     )
 
     print(
-        "MODE FINAL - USER REPORT V3",
+        "Mode: REPORT HARIAN OTOMATIS",
         flush=True
     )
 
@@ -2091,10 +1998,7 @@ def main():
         .build()
     )
 
-    # =====================================================
     # COMMAND
-    # =====================================================
-
     app.add_handler(
         CommandHandler(
             "start",
@@ -2130,20 +2034,21 @@ def main():
         )
     )
 
-    # =====================================================
-    # CALLBACK
-    # =====================================================
+    app.add_handler(
+        CommandHandler(
+            "tutor",
+            tutor
+        )
+    )
 
+    # CALLBACK
     app.add_handler(
         CallbackQueryHandler(
             tombol
         )
     )
 
-    # =====================================================
-    # PESAN TEXT
-    # =====================================================
-
+    # TEXT
     app.add_handler(
         MessageHandler(
             filters.TEXT
@@ -2151,10 +2056,6 @@ def main():
             pesan
         )
     )
-
-    # =====================================================
-    # ERROR
-    # =====================================================
 
     app.add_error_handler(
         error_handler
